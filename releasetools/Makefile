@@ -1,4 +1,21 @@
 # Makefile for the kernel image.
+
+all usage help:
+	@echo " " >&2
+	@echo "Master Makefile to create new MINIX configuration." >&2
+	@echo "Root privileges are required." >&2
+	@echo " " >&2
+	@echo "Usage:" >&2
+	@echo "	make includes   # Install include files" >&2
+	@echo "	make depend     # Generate dependency files" >&2
+	@echo "	make services   # Compile and install all services" >&2
+	@echo "	make hdboot     # Make image, and install to hard disk" >&2
+	@echo "	make clean      # Remove all compiler results" >&2
+	@echo " " >&2
+	@echo "To create a fresh MINIX configuration, try:" >&2
+	@echo "	make clean install      # new boot image" >&2
+	@echo " " >&2
+
 .include <bsd.obj.mk>
 
 GEN_FILES=	*.bak image kernel *.iso *.iso.gz cdfdimage rootimage src
@@ -25,22 +42,6 @@ PROGRAMS+= ${PROGROOT}/minix/servers/vm/vm
 PROGRAMS+= ${PROGROOT}/minix/fs/pfs/pfs
 PROGRAMS+= ${PROGROOT}/minix/fs/mfs/mfs
 PROGRAMS+= ${PROGROOT}/sbin/init/init
-
-all usage help:
-	@echo " " >&2
-	@echo "Master Makefile to create new MINIX configuration." >&2
-	@echo "Root privileges are required." >&2
-	@echo " " >&2
-	@echo "Usage:" >&2
-	@echo "	make includes   # Install include files" >&2
-	@echo "	make depend     # Generate dependency files" >&2
-	@echo "	make services   # Compile and install all services" >&2
-	@echo "	make hdboot     # Make image, and install to hard disk" >&2
-	@echo "	make clean      # Remove all compiler results" >&2
-	@echo " " >&2
-	@echo "To create a fresh MINIX configuration, try:" >&2
-	@echo "	make clean install      # new boot image" >&2
-	@echo " " >&2
 
 .gitignore: Makefile
 	echo ${GEN_FILES} | tr ' ' '\n' >.gitignore
