@@ -1,12 +1,12 @@
 # Makefile for the kernel image.
-.include <bsd.own.mk>
+.include <bsd.obj.mk>
 
 GEN_FILES=	*.bak image kernel *.iso *.iso.gz cdfdimage rootimage src
 
 # LSC detect where were built the objects files
 PROGROOT:= ..
-.if "${MAKEOBJDIR:S,${.CURDIR},,}" != ""
-PROGROOT:= ${MAKEOBJDIR:S,releasetools,,}
+.if "${MKOBJDIRS}" != "no"
+PROGROOT:= ${BSDOBJDIR}
 .endif
 
 # Specify the programs that are part of the system image.
