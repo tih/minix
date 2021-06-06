@@ -90,7 +90,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long UNUSED(request),
 		      endpoint_t UNUSED(endpt), cp_grant_id_t UNUSED(grant),
 		      int UNUSED(flags), endpoint_t UNUSED(user_endpt),
-		      cdev_id_t UNUSED(id));
+		      cdev_id_t UNUSED(id))
 {
   return EINVAL;
 }
