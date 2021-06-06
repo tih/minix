@@ -5,6 +5,7 @@ SUBDIR+=	audio
 SUBDIR+=	clock
 SUBDIR+=	eeprom
 SUBDIR+=	examples
+SUBDIR+=	inmos
 SUBDIR+=	iommu
 SUBDIR+=	net
 SUBDIR+=	power
