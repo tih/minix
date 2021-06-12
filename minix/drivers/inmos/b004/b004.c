@@ -260,7 +260,7 @@ void b004_probe(void) {
 	usleep(10000);
 	if (sys_inb(B008_INT, &b) == OK) {
 	  usleep(10000);
-	  sys_outb(B004_INT, 0);
+	  sys_outb(B008_INT, 0);
 	  usleep(10000);
 	  sys_inb(B008_INT, &b);
 	  if ((b & B008_INT_MASK) == 0) {
