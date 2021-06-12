@@ -250,7 +250,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 }
 
 void b004_probe(void) {
-  unsigned char b;
+  unsigned int b;
 
   if (sys_outb(B004_OSR, 0) == OK) {
     usleep(10000);
