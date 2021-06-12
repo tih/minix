@@ -14,6 +14,8 @@
 #define B008_DMA	0x12		/* B008 DMA request register */
 #define B008_INT	0x13		/* B008 interrupt control register */
 
+#define B004_IRQ	5
+
 #define DMA_SIZE	4096		/* Max bytes per DMA transfer */
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 

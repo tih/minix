@@ -65,7 +65,7 @@ static int b004_close(devminor_t UNUSED(minor)) {
 
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
-			 int UNUSED(flags), cdev_id_t UNUSED(id)) {
+			 int flags, cdev_id_t UNUSED(id)) {
   int ret;
   int avail, xfer;
 
@@ -78,13 +78,13 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   avail = rbuf_write_offset - rbuf_read_offset;
 
   if (flags & CDEV_NONBLOCK) {
-    if (avail = 0) {
+    if (avail == 0) {
       rlink_busy = 0;
       return EAGAIN;
     }
     xfer = MIN(avail, size);
     if ((ret = sys_safecopyto(endpt, grant,
-			      rbuf_read_offset, linkbuf, xfer)) != OK) {
+			      rbuf_read_offset, rlinkbuf, xfer)) != OK) {
       rlink_busy = 0;
       return ret;
     }
@@ -100,7 +100,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   for (;;) {
     if (avail >= size) {
       if ((ret = sys_safecopyto(endpt, grant,
-				rbuf_read_offset, linkbuf, size)) != OK) {
+				rbuf_read_offset, rlinkbuf, size)) != OK) {
 	rlink_busy = 0;
 	return ret;
       }
@@ -121,7 +121,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
-			  int UNUSED(flags), cdev_id_t UNUSED(id)) {
+			  int flags, cdev_id_t UNUSED(id)) {
   int ret;
 
   if (wlink_busy)		return EIO;
@@ -130,7 +130,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   wlink_busy = 1;
 
-  if ((ret = sys_safecopyfrom(endpt, grant, 0, linkbuf, size)) != OK)
+  if ((ret = sys_safecopyfrom(endpt, grant, 0, wlinkbuf, size)) != OK)
     return ret;
 
   wbuf_read_offset = 0;
@@ -197,18 +197,30 @@ static void sef_local_startup() {
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   int off;
 
-  if (!(linkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M | AC_ALIGN4K,
-			       &linkbuf_phys)))
+  if (!(rlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M | AC_ALIGN4K,
+				&rlinkbuf_phys)))
     panic("couldn't allocate DMA buffer");
 
-  if (linkbuf / DMA_ALIGN != (linkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
-    off = linkbuf % DMA_ALIGN;
-    linkbuf += (DMA_ALIGN - off);
-    linkbuf_phys += (DMA_ALIGN - off);
+  if (rlinkbuf / DMA_ALIGN != (rlinkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
+    off = rlinkbuf % DMA_ALIGN;
+    rlinkbuf += (DMA_ALIGN - off);
+    rlinkbuf_phys += (DMA_ALIGN - off);
   }
 
-  buf_read_offset = 0;
-  buf_write_offset = 0;
+  if (!(wlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M | AC_ALIGN4K,
+				&wlinkbuf_phys)))
+    panic("couldn't allocate DMA buffer");
+
+  if (wlinkbuf / DMA_ALIGN != (wlinkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
+    off = wlinkbuf % DMA_ALIGN;
+    wlinkbuf += (DMA_ALIGN - off);
+    wlinkbuf_phys += (DMA_ALIGN - off);
+  }
+
+  rbuf_read_offset = 0;
+  rbuf_write_offset = 0;
+  wbuf_read_offset = 0;
+  wbuf_write_offset = 0;
 
   irq_hook_id = 0;
   if(sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK ||
