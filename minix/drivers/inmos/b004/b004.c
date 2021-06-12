@@ -259,6 +259,10 @@ void b004_probe(void) {
 	board_type = B004;
 	usleep(10000);
 	if (sys_inb(B008_INT, &b) == OK) {
+	  usleep(10000);
+	  sys_outb(B004_INT, 0);
+	  usleep(10000);
+	  sys_inb(B008_INT, &b);
 	  if ((b & B008_INT_MASK) == 0) {
 	    board_type = B008;
 	  }
