@@ -78,7 +78,7 @@
 #define INPUT_MAJOR		  64	/* 64 = /dev/input (input)            */
 #define USB_BASE_MAJOR		  65	/* 65-133 = USB major range	      */
 #define PCI_MAJOR		 134	/* 134 = /dev/pci (pci)               */
-#define B004_MAJOR		 135	/* 135 = /dev/b004 (transputers)      */
+#define B004_MAJOR		 135	/* 135 = /dev/link0 (transputers)     */
 
 #define NR_DEVICES   		 136	/* number of (major) devices */
 

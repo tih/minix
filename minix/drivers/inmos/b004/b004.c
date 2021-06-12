@@ -3,178 +3,233 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <minix/ds.h>
+
 #include "b004.h"
 
-/*
- * Function prototypes for the b004 driver.
- */
 static int b004_open(devminor_t minor, int access, endpoint_t user_endpt);
-static int b004_close(devminor_t minor);
-static ssize_t b004_read(devminor_t minor, u64_t position, endpoint_t endpt,
-    cp_grant_id_t grant, size_t size, int flags, cdev_id_t id);
-static ssize_t b004_write(devminor_t minor, u64_t position, endpoint_t endpt,
-    cp_grant_id_t grant, size_t size, int flags, cdev_id_t id);
-static int b004_ioctl(devminor_t minor, unsigned long request, endpoint_t endpt,
-    cp_grant_id_t grant, int flags, endpoint_t user_endpt, cdev_id_t id);
 
-/* SEF functions and variables. */
+static int b004_close(devminor_t minor);
+
+static ssize_t b004_read(devminor_t minor, u64_t position, endpoint_t endpt,
+			 cp_grant_id_t grant, size_t size, int flags,
+			 cdev_id_t id);
+
+static ssize_t b004_write(devminor_t minor, u64_t position, endpoint_t endpt,
+			  cp_grant_id_t grant, size_t size, int flags,
+			  cdev_id_t id);
+
+static int b004_ioctl(devminor_t minor, unsigned long request,
+		      endpoint_t endpt, cp_grant_id_t grant, int flags,
+		      endpoint_t user_endpt, cdev_id_t id);
+
+static void b004_intr(unsigned int mask);
+
 static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
 static int sef_cb_lu_state_save(int, int);
 static int lu_state_restore(void);
 
-/* Entry points to the b004 driver. */
-static struct chardriver b004_tab =
-{
-    .cdr_open	= b004_open,
-    .cdr_close	= b004_close,
-    .cdr_read	= b004_read,
-    .cdr_write	= b004_write,
-    .cdr_ioctl	= b004_ioctl,
+static struct chardriver b004_tab = {
+  .cdr_open  = b004_open,
+  .cdr_close = b004_close,
+  .cdr_read  = b004_read,
+  .cdr_write = b004_write,
+  .cdr_ioctl = b004_ioctl,
+  .cdr_intr  = b004_intr,
 };
 
-/** State variable to count the number of times the device has been opened.
- * Note that this is not the regular type of open counter: it never decreases.
- */
+static vir_bytes rlinkbuf, wlinkbuf;
+static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
+static int rbuf_read_offset, rbuf_write_offset;
+static int wbuf_read_offset, wbuf_write_offset;
+static int rlink_busy, wlink_busy;
+
+static int irq_hook_id;
+
 static int open_counter;
 
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
-    endpoint_t UNUSED(user_endpt))
-{
-    printf("b004_open(). Called %d time(s).\n", ++open_counter);
-    return OK;
+		     endpoint_t UNUSED(user_endpt)) {
+
+  printf("b004_open(). Called %d time(s).\n", ++open_counter);
+
+  return OK;
 }
 
-static int b004_close(devminor_t UNUSED(minor))
-{
-    printf("b004_close()\n");
-    return OK;
+static int b004_close(devminor_t UNUSED(minor)) {
+
+  printf("b004_close()\n");
+
+  return OK;
 }
 
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
-    endpoint_t endpt, cp_grant_id_t grant, size_t size, int UNUSED(flags),
-    cdev_id_t UNUSED(id))
-{
-    u64_t dev_size;
-    char *ptr;
-    int ret;
-    char *buf = B004_MESSAGE;
+			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
+			 int UNUSED(flags), cdev_id_t UNUSED(id)) {
+  int ret;
+  int avail, xfer;
 
-    printf("b004_read()\n");
+  if (rlink_busy)		return EIO;
+  if (size <= 0)		return EINVAL;
+  if (size > DMA_SIZE)		return EINVAL;
 
-    /* This is the total size of our device. */
-    dev_size = (u64_t) strlen(buf);
+  rlink_busy = 1;
 
-    /* Check for EOF, and possibly limit the read size. */
-    if (position >= dev_size) return 0;		/* EOF */
-    if (position + size > dev_size)
-        size = (size_t)(dev_size - position);	/* limit size */
+  avail = rbuf_write_offset - rbuf_read_offset;
 
-    /* Copy the requested part to the caller. */
-    ptr = buf + (size_t)position;
-    if ((ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) ptr, size)) != OK)
-        return ret;
+  if (flags & CDEV_NONBLOCK) {
+    if (avail = 0) {
+      rlink_busy = 0;
+      return EAGAIN;
+    }
+    xfer = MIN(avail, size);
+    if ((ret = sys_safecopyto(endpt, grant,
+			      rbuf_read_offset, linkbuf, xfer)) != OK) {
+      rlink_busy = 0;
+      return ret;
+    }
+    rbuf_read_offset += xfer;
+    if (rbuf_read_offset == rbuf_write_offset) {
+      rbuf_read_offset = 0;
+      rbuf_write_offset = 0;
+    }
+    rlink_busy = 0;
+    return xfer;
+  }
 
-    /* Return the number of bytes read. */
-    return size;
+  for (;;) {
+    if (avail >= size) {
+      if ((ret = sys_safecopyto(endpt, grant,
+				rbuf_read_offset, linkbuf, size)) != OK) {
+	rlink_busy = 0;
+	return ret;
+      }
+      rbuf_read_offset += size;
+      if (rbuf_read_offset == rbuf_write_offset) {
+	rbuf_read_offset = 0;
+	rbuf_write_offset = 0;
+      }
+      rlink_busy = 0;
+      return size;
+    } else {
+      usleep(10000);
+      avail = rbuf_write_offset - rbuf_read_offset;
+    }
+  }
+  /* NOTREACHED */
 }
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
-			  endpoint_t UNUSED(endpt), cp_grant_id_t UNUSED(grant),
-			  size_t UNUSED(size), int UNUSED(flags),
-			  cdev_id_t UNUSED(id))
-{
-  return EINVAL;
+			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
+			  int UNUSED(flags), cdev_id_t UNUSED(id)) {
+  int ret;
+
+  if (wlink_busy)		return EIO;
+  if (size <= 0)		return EINVAL;
+  if (size > DMA_SIZE)		return EINVAL;
+
+  wlink_busy = 1;
+
+  if ((ret = sys_safecopyfrom(endpt, grant, 0, linkbuf, size)) != OK)
+    return ret;
+
+  wbuf_read_offset = 0;
+  wbuf_write_offset = size;
+
+  b004_intr(0);
+
+  if (flags & CDEV_NONBLOCK)
+    return size;
+
+  while (wbuf_read_offset != wbuf_write_offset)
+    usleep(10000);
+
+  return size;
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long UNUSED(request),
 		      endpoint_t UNUSED(endpt), cp_grant_id_t UNUSED(grant),
 		      int UNUSED(flags), endpoint_t UNUSED(user_endpt),
-		      cdev_id_t UNUSED(id))
-{
+		      cdev_id_t UNUSED(id)) {
+
+  /* Should have reset, analyse, getflags, and setflags */
+
   return EINVAL;
 }
 
-static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
-/* Save the state. */
-    ds_publish_u32("open_counter", open_counter, DSF_OVERWRITE);
+static void b004_intr(unsigned int UNUSED(mask)) {
 
-    return OK;
+  if(sys_irqenable(&irq_hook_id) != OK) {
+	panic("sys_irqenable failed");
+  }
+
+  return;
+}
+
+static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
+
+  ds_publish_u32("open_counter", open_counter, DSF_OVERWRITE);
+
+  return OK;
 }
 
 static int lu_state_restore() {
-/* Restore the state. */
-    u32_t value;
+  u32_t value;
 
-    ds_retrieve_u32("open_counter", &value);
-    ds_delete_u32("open_counter");
-    open_counter = (int) value;
+  ds_retrieve_u32("open_counter", &value);
+  ds_delete_u32("open_counter");
+  open_counter = (int) value;
 
-    return OK;
+  return OK;
 }
 
-static void sef_local_startup()
-{
-    /*
-     * Register init callbacks. Use the same function for all event types
-     */
-    sef_setcb_init_fresh(sef_cb_init);
-    sef_setcb_init_lu(sef_cb_init);
-    sef_setcb_init_restart(sef_cb_init);
+static void sef_local_startup() {
 
-    /*
-     * Register live update callbacks.
-     */
-    sef_setcb_lu_state_save(sef_cb_lu_state_save);
+  sef_setcb_init_fresh(sef_cb_init);
+  sef_setcb_init_lu(sef_cb_init);
+  sef_setcb_init_restart(sef_cb_init);
 
-    /* Let SEF perform startup. */
-    sef_startup();
+  sef_setcb_lu_state_save(sef_cb_lu_state_save);
+
+  sef_startup();
 }
 
-static int sef_cb_init(int type, sef_init_info_t *UNUSED(info))
-{
-/* Initialize the b004 driver. */
-    int do_announce_driver = TRUE;
+static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
+  int off;
 
-    open_counter = 0;
-    switch(type) {
-        case SEF_INIT_FRESH:
-            printf("%s", B004_MESSAGE);
-        break;
+  if (!(linkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M | AC_ALIGN4K,
+			       &linkbuf_phys)))
+    panic("couldn't allocate DMA buffer");
 
-        case SEF_INIT_LU:
-            /* Restore the state. */
-            lu_state_restore();
-            do_announce_driver = FALSE;
+  if (linkbuf / DMA_ALIGN != (linkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
+    off = linkbuf % DMA_ALIGN;
+    linkbuf += (DMA_ALIGN - off);
+    linkbuf_phys += (DMA_ALIGN - off);
+  }
 
-            printf("%sHey, I'm a new version!\n", B004_MESSAGE);
-        break;
+  buf_read_offset = 0;
+  buf_write_offset = 0;
 
-        case SEF_INIT_RESTART:
-            printf("%sHey, I've just been restarted!\n", B004_MESSAGE);
-        break;
-    }
+  irq_hook_id = 0;
+  if(sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK ||
+     sys_irqenable(&irq_hook_id) != OK) {
+    panic("do_initialize: irq enabling failed");
+  }
 
-    /* Announce we are up when necessary. */
-    if (do_announce_driver) {
-        chardriver_announce();
-    }
+  if (type == SEF_INIT_LU)
+    lu_state_restore();
 
-    /* Initialization completed successfully. */
-    return OK;
+  if (type == SEF_INIT_FRESH)
+    chardriver_announce();
+
+  return OK;
 }
 
-int main(void)
-{
-    /*
-     * Perform initialization.
-     */
-    sef_local_startup();
+int main(void) {
 
-    /*
-     * Run the main loop.
-     */
-    chardriver_task(&b004_tab);
-    return OK;
+  sef_local_startup();
+
+  chardriver_task(&b004_tab);
+
+  return OK;
 }
-
