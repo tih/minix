@@ -197,7 +197,7 @@ static void sef_local_startup() {
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   int off;
 
-  if (!(rlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M | AC_ALIGN4K,
+  if (!(rlinkbuf = (vir_bytes)alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
 				&rlinkbuf_phys)))
     panic("couldn't allocate DMA buffer");
 
@@ -207,7 +207,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     rlinkbuf_phys += (DMA_ALIGN - off);
   }
 
-  if (!(wlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M | AC_ALIGN4K,
+  if (!(wlinkbuf = (vir_bytes)alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
 				&wlinkbuf_phys)))
     panic("couldn't allocate DMA buffer");
 
