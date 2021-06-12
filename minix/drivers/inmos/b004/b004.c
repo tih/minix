@@ -24,6 +24,9 @@ static int b004_ioctl(devminor_t minor, unsigned long request,
 
 static void b004_intr(unsigned int mask);
 
+static void b004_probe(void);
+static void b004_initialize(void);
+
 static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
 static int sef_cb_lu_state_save(int, int);
@@ -37,6 +40,8 @@ static struct chardriver b004_tab = {
   .cdr_ioctl = b004_ioctl,
   .cdr_intr  = b004_intr,
 };
+
+static int board_type = 0;
 
 static vir_bytes rlinkbuf, wlinkbuf;
 static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
@@ -222,6 +227,13 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   wbuf_read_offset = 0;
   wbuf_write_offset = 0;
 
+  if (board_type == 0) {
+    b004_probe();
+    if ((board_type != 0) && (type == SEF_INIT_FRESH)) {
+      b004_initialize();
+    }
+  }
+
   irq_hook_id = 0;
   if(sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK ||
      sys_irqenable(&irq_hook_id) != OK) {
@@ -237,11 +249,38 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   return OK;
 }
 
+void b004_probe(void) {
+  unsigned char b;
+
+  if (sys_outb(B004_OSR, 0) == OK) {
+    usleep(10000);
+    if (sys_inb(B004_OSR, &b) == OK) {
+      if (b & B004_READY) {
+	board_type = B004;
+	usleep(10000);
+	if (sys_inb(B008_INT, &b) == OK) {
+	  if ((b & B008_INT_MASK) == 0) {
+	    board_type = B008;
+	  }
+	}
+      }
+    }
+  }
+
+  if (board_type)
+    printf("Found a %s device!\n", board_type == B004 ? "B004" : "B008");
+}
+
+void b004_initialize(void) {
+
+}
+
 int main(void) {
 
   sef_local_startup();
 
-  chardriver_task(&b004_tab);
+  if (board_type != 0)
+    chardriver_task(&b004_tab);
 
   return OK;
 }
