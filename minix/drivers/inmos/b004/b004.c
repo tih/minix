@@ -229,7 +229,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     panic("sef_cb_init: couldn't allocate DMA buffer");
 
   if (rlinkbuf_phys/DMA_ALIGN != (rlinkbuf_phys+DMA_SIZE-1)/DMA_ALIGN) {
-    off = rlinkbuf % DMA_ALIGN;
+    off = rlinkbuf_phys % DMA_ALIGN;
     rlinkbuf += (DMA_ALIGN - off);
     rlinkbuf_phys += (DMA_ALIGN - off);
   }
@@ -239,7 +239,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     panic("sef_cb_init: couldn't allocate DMA buffer");
 
   if (wlinkbuf_phys/DMA_ALIGN != (wlinkbuf_phys+DMA_SIZE-1)/DMA_ALIGN) {
-    off = wlinkbuf % DMA_ALIGN;
+    off = wlinkbuf_phys % DMA_ALIGN;
     wlinkbuf += (DMA_ALIGN - off);
     wlinkbuf_phys += (DMA_ALIGN - off);
   }
