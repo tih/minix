@@ -119,7 +119,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       rlink_busy = 0;
       return size;
     } else {
-      usleep(10000);
+      usleep(B004_DELAY);
       avail = rbuf_write_offset - rbuf_read_offset;
     }
   }
@@ -149,7 +149,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     return size;
 
   while (wbuf_read_offset != wbuf_write_offset)
-    usleep(10000);
+    usleep(B004_DELAY);
 
   return size;
 }
@@ -165,10 +165,29 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long UNUSED(request),
 }
 
 static void b004_intr(unsigned int UNUSED(mask)) {
+  unsigned int b;
 
-  if(sys_irqenable(&irq_hook_id) != OK) {
-	panic("sys_irqenable failed");
+  if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
+    sys_inb(B004_OSR, &b);
+    if (b & B004_READY) {
+      sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
+      if (wbuf_read_offset == wbuf_write_offset)
+	wlink_busy == 0;
+      sys_outb(B004_OSR, B004_INT_ENA);
+    }
   }
+
+  if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
+    sys_inb(B004_ISR, &b);
+    if (b & B004_READY) {
+      sys_inb(B004_IDR, &b);
+      rlinkbuf[rbuf_write_offset++] = b;
+      sys_outb(B004_ISR, B004_INT_ENA);
+    }
+  }
+
+  if (sys_irqenable(&irq_hook_id) != OK)
+    panic("b004_intr: couldn't re-enable interrupt");
 
   return;
 }
@@ -205,8 +224,8 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   int off;
 
   if (!(rlinkbuf = (vir_bytes)alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
-				&rlinkbuf_phys)))
-    panic("couldn't allocate DMA buffer");
+					   &rlinkbuf_phys)))
+    panic("sef_cb_init: couldn't allocate DMA buffer");
 
   if (rlinkbuf / DMA_ALIGN != (rlinkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
     off = rlinkbuf % DMA_ALIGN;
@@ -215,8 +234,8 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   }
 
   if (!(wlinkbuf = (vir_bytes)alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
-				&wlinkbuf_phys)))
-    panic("couldn't allocate DMA buffer");
+					   &wlinkbuf_phys)))
+    panic("sef_cb_init: couldn't allocate DMA buffer");
 
   if (wlinkbuf / DMA_ALIGN != (wlinkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
     off = wlinkbuf % DMA_ALIGN;
@@ -237,10 +256,9 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   }
 
   irq_hook_id = 0;
-  if(sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK ||
-     sys_irqenable(&irq_hook_id) != OK) {
-    panic("do_initialize: irq enabling failed");
-  }
+  if (sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK ||
+      sys_irqenable(&irq_hook_id) != OK)
+    panic("sef_cb_init: couldn't enable interrupt");
 
   if (type == SEF_INIT_LU)
     lu_state_restore();
@@ -255,18 +273,17 @@ void b004_probe(void) {
   unsigned int b;
 
   if (sys_outb(B004_OSR, 0) == OK) {
-    usleep(10000);
+    usleep(B004_DELAY);
     if (sys_inb(B004_OSR, &b) == OK) {
-      usleep(10000);
+      usleep(B004_DELAY);
       if (b & B004_READY) {
 	board_type = B004;
 	if (sys_inb(B008_INT, &b) == OK) {
-	  usleep(10000);
-	  b004_reset();
+	  usleep(B004_DELAY);
 	  sys_outb(B008_INT, 0);
-	  usleep(10000);
+	  usleep(B004_DELAY);
 	  sys_inb(B008_INT, &b);
-	  usleep(10000);
+	  usleep(B004_DELAY);
 	  if ((b & B008_INT_MASK) == 0) {
 	    board_type = B008;
 	  }
@@ -276,38 +293,53 @@ void b004_probe(void) {
   }
 
   if (board_type)
-    printf("Found a %s device!\n", board_type == B004 ? "B004" : "B008");
+    printf("Probe found a %s device.\n",
+	   board_type == B004 ? "B004" : "B008");
 }
 
 void b004_initialize(void) {
+
+  b004_reset();
+  sys_outb(B004_ISR, B004_INT_DIS);
+  usleep(B004_DELAY);
+  sys_outb(B004_OSR, B004_INT_DIS);
+  usleep(B004_DELAY);
+  if (board_type == B008) {
+    sys_outb(B008_INT, B008_INT_DIS);
+    usleep(B004_DELAY);
+  }
 }
 
 void b004_reset(void) {
 
   sys_outb(B004_ANALYSE, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_RESET, 1);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
+  printf("The %s device has been reset.\n",
+	 board_type == B004 ? "B004" : "B008");
 }
 
 void b004_analyse(void) {
 
   sys_outb(B004_ANALYSE, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_ANALYSE, 1);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_RESET, 1);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
   sys_outb(B004_ANALYSE, 0);
-  usleep(10000);
+  usleep(B004_DELAY);
+  printf("The %s device is now in analyse mode.\n",
+	 board_type == B004 ? "B004" : "B008");
 }
 
 int main(void) {

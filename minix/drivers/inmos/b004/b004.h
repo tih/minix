@@ -16,12 +16,14 @@
 
 #define B004_READY	0x1
 #define B004_INT_ENA	0x2
+#define B004_INT_DIS	0x0
 
 #define B008_DMAINT_ENA	0x1
 #define B008_ERRINT_ENA	0x2
 #define B008_OUTINT_ENA	0x4
 #define B008_INPINT_ENA	0x8
 #define B008_INT_MASK	0xf
+#define B008_INT_DIS	0x0
 
 #define B004		4
 #define B008		8
@@ -29,5 +31,6 @@
 #define DMA_SIZE	4096		/* Max bytes per DMA transfer */
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
+#define B004_DELAY	10000		/* ten milliseconds (usleep) */
 
 #endif /* __B004_H */
