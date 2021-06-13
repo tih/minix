@@ -45,7 +45,7 @@ static struct chardriver b004_tab = {
 
 static int board_type = 0;
 
-static vir_bytes rlinkbuf, wlinkbuf;
+static unsigned char *rlinkbuf, *wlinkbuf;
 static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
 static int rbuf_read_offset, rbuf_write_offset;
 static int wbuf_read_offset, wbuf_write_offset;
@@ -90,8 +90,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       return EAGAIN;
     }
     xfer = MIN(avail, size);
-    if ((ret = sys_safecopyto(endpt, grant,
-			      rbuf_read_offset, rlinkbuf, xfer)) != OK) {
+    if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
+			      (vir_bytes)rlinkbuf, xfer)) != OK) {
       rlink_busy = 0;
       return ret;
     }
@@ -106,8 +106,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 
   for (;;) {
     if (avail >= size) {
-      if ((ret = sys_safecopyto(endpt, grant,
-				rbuf_read_offset, rlinkbuf, size)) != OK) {
+      if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
+				(vir_bytes)rlinkbuf, size)) != OK) {
 	rlink_busy = 0;
 	return ret;
       }
@@ -137,7 +137,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   wlink_busy = 1;
 
-  if ((ret = sys_safecopyfrom(endpt, grant, 0, wlinkbuf, size)) != OK)
+  if ((ret = sys_safecopyfrom(endpt, grant,
+			      0, (vir_bytes)wlinkbuf, size)) != OK)
     return ret;
 
   wbuf_read_offset = 0;
@@ -172,7 +173,7 @@ static void b004_intr(unsigned int UNUSED(mask)) {
     if (b & B004_READY) {
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
       if (wbuf_read_offset == wbuf_write_offset)
-	wlink_busy == 0;
+	wlink_busy = 0;
       sys_outb(B004_OSR, B004_INT_ENA);
     }
   }
@@ -223,21 +224,21 @@ static void sef_local_startup() {
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   int off;
 
-  if (!(rlinkbuf = (vir_bytes)alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
-					   &rlinkbuf_phys)))
+  if (!(rlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
+				&rlinkbuf_phys)))
     panic("sef_cb_init: couldn't allocate DMA buffer");
 
-  if (rlinkbuf / DMA_ALIGN != (rlinkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
+  if (rlinkbuf_phys/DMA_ALIGN != (rlinkbuf_phys+DMA_SIZE-1)/DMA_ALIGN) {
     off = rlinkbuf % DMA_ALIGN;
     rlinkbuf += (DMA_ALIGN - off);
     rlinkbuf_phys += (DMA_ALIGN - off);
   }
 
-  if (!(wlinkbuf = (vir_bytes)alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
-					   &wlinkbuf_phys)))
+  if (!(wlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
+				&wlinkbuf_phys)))
     panic("sef_cb_init: couldn't allocate DMA buffer");
 
-  if (wlinkbuf / DMA_ALIGN != (wlinkbuf + DMA_SIZE - 1) / DMA_ALIGN) {
+  if (wlinkbuf_phys/DMA_ALIGN != (wlinkbuf_phys+DMA_SIZE-1)/DMA_ALIGN) {
     off = wlinkbuf % DMA_ALIGN;
     wlinkbuf += (DMA_ALIGN - off);
     wlinkbuf_phys += (DMA_ALIGN - off);
