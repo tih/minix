@@ -31,6 +31,7 @@
 #define DMA_SIZE	4096		/* Max bytes per DMA transfer */
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
-#define B004_DELAY	10000		/* ten milliseconds (usleep) */
+#define B004_IO_DELAY	10000		/* 10 milliseconds (usleep) */
+#define B004_RST_DELAY	100000		/* 100 milliseconds (usleep) */
 
 #endif /* __B004_H */

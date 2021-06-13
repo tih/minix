@@ -119,7 +119,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       rlink_busy = 0;
       return size;
     } else {
-      usleep(B004_DELAY);
+      usleep(B004_IO_DELAY);
       avail = rbuf_write_offset - rbuf_read_offset;
     }
   }
@@ -150,7 +150,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     return size;
 
   while (wbuf_read_offset != wbuf_write_offset)
-    usleep(B004_DELAY);
+    usleep(B004_IO_DELAY);
 
   return size;
 }
@@ -274,17 +274,17 @@ void b004_probe(void) {
   unsigned int b;
 
   if (sys_outb(B004_OSR, 0) == OK) {
-    usleep(B004_DELAY);
+    usleep(B004_IO_DELAY);
     if (sys_inb(B004_OSR, &b) == OK) {
-      usleep(B004_DELAY);
+      usleep(B004_IO_DELAY);
       if (b & B004_READY) {
 	board_type = B004;
 	if (sys_inb(B008_INT, &b) == OK) {
-	  usleep(B004_DELAY);
+	  usleep(B004_IO_DELAY);
 	  sys_outb(B008_INT, 0);
-	  usleep(B004_DELAY);
+	  usleep(B004_IO_DELAY);
 	  sys_inb(B008_INT, &b);
-	  usleep(B004_DELAY);
+	  usleep(B004_IO_DELAY);
 	  if ((b & B008_INT_MASK) == 0) {
 	    board_type = B008;
 	  }
@@ -302,25 +302,25 @@ void b004_initialize(void) {
 
   b004_reset();
   sys_outb(B004_ISR, B004_INT_DIS);
-  usleep(B004_DELAY);
+  usleep(B004_IO_DELAY);
   sys_outb(B004_OSR, B004_INT_DIS);
-  usleep(B004_DELAY);
+  usleep(B004_IO_DELAY);
   if (board_type == B008) {
     sys_outb(B008_INT, B008_INT_DIS);
-    usleep(B004_DELAY);
+    usleep(B004_IO_DELAY);
   }
 }
 
 void b004_reset(void) {
 
   sys_outb(B004_ANALYSE, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 1);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   printf("The %s device has been reset.\n",
 	 board_type == B004 ? "B004" : "B008");
 }
@@ -328,17 +328,17 @@ void b004_reset(void) {
 void b004_analyse(void) {
 
   sys_outb(B004_ANALYSE, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_ANALYSE, 1);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 1);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   sys_outb(B004_ANALYSE, 0);
-  usleep(B004_DELAY);
+  usleep(B004_RST_DELAY);
   printf("The %s device is now in analyse mode.\n",
 	 board_type == B004 ? "B004" : "B008");
 }
