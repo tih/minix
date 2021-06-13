@@ -26,6 +26,8 @@ static void b004_intr(unsigned int mask);
 
 static void b004_probe(void);
 static void b004_initialize(void);
+static void b004_reset(void);
+static void b004_analyse(void);
 
 static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
@@ -255,14 +257,16 @@ void b004_probe(void) {
   if (sys_outb(B004_OSR, 0) == OK) {
     usleep(10000);
     if (sys_inb(B004_OSR, &b) == OK) {
+      usleep(10000);
       if (b & B004_READY) {
 	board_type = B004;
-	usleep(10000);
 	if (sys_inb(B008_INT, &b) == OK) {
 	  usleep(10000);
+	  b004_reset();
 	  sys_outb(B008_INT, 0);
 	  usleep(10000);
 	  sys_inb(B008_INT, &b);
+	  usleep(10000);
 	  if ((b & B008_INT_MASK) == 0) {
 	    board_type = B008;
 	  }
@@ -276,7 +280,34 @@ void b004_probe(void) {
 }
 
 void b004_initialize(void) {
+}
 
+void b004_reset(void) {
+
+  sys_outb(B008_ANALYSE, 0);
+  usleep(10000);
+  sys_outb(B008_RESET, 0);
+  usleep(10000);
+  sys_outb(B008_RESET, 1);
+  usleep(10000);
+  sys_outb(B008_RESET, 0);
+  usleep(10000);
+}
+
+void b004_analyse(void) {
+
+  sys_outb(B008_ANALYSE, 0);
+  usleep(10000);
+  sys_outb(B008_RESET, 0);
+  usleep(10000);
+  sys_outb(B008_ANALYSE, 1);
+  usleep(10000);
+  sys_outb(B008_RESET, 1);
+  usleep(10000);
+  sys_outb(B008_RESET, 0);
+  usleep(10000);
+  sys_outb(B008_ANALYSE, 0);
+  usleep(10000);
 }
 
 int main(void) {
