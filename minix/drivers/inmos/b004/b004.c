@@ -284,29 +284,29 @@ void b004_initialize(void) {
 
 void b004_reset(void) {
 
-  sys_outb(B008_ANALYSE, 0);
+  sys_outb(B004_ANALYSE, 0);
   usleep(10000);
-  sys_outb(B008_RESET, 0);
+  sys_outb(B004_RESET, 0);
   usleep(10000);
-  sys_outb(B008_RESET, 1);
+  sys_outb(B004_RESET, 1);
   usleep(10000);
-  sys_outb(B008_RESET, 0);
+  sys_outb(B004_RESET, 0);
   usleep(10000);
 }
 
 void b004_analyse(void) {
 
-  sys_outb(B008_ANALYSE, 0);
+  sys_outb(B004_ANALYSE, 0);
   usleep(10000);
-  sys_outb(B008_RESET, 0);
+  sys_outb(B004_RESET, 0);
   usleep(10000);
-  sys_outb(B008_ANALYSE, 1);
+  sys_outb(B004_ANALYSE, 1);
   usleep(10000);
-  sys_outb(B008_RESET, 1);
+  sys_outb(B004_RESET, 1);
   usleep(10000);
-  sys_outb(B008_RESET, 0);
+  sys_outb(B004_RESET, 0);
   usleep(10000);
-  sys_outb(B008_ANALYSE, 0);
+  sys_outb(B004_ANALYSE, 0);
   usleep(10000);
 }
 
