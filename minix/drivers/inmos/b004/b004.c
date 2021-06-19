@@ -128,6 +128,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       return size;
     } else {
       usleep(B004_IO_DELAY);
+      b004_intr(0);		/* hack while interrupts don't work */
       avail = rbuf_write_offset - rbuf_read_offset;
     }
   }
@@ -158,8 +159,10 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (flags & CDEV_NONBLOCK)
     return size;
 
-  while (wbuf_read_offset != wbuf_write_offset)
+  while (wbuf_read_offset != wbuf_write_offset) {
     usleep(B004_IO_DELAY);
+    b004_intr(0);		/* hack while interrupts don't work */
+  }
 
   return size;
 }
@@ -219,10 +222,6 @@ static void b004_intr(unsigned int UNUSED(mask)) {
       if (wbuf_read_offset == wbuf_write_offset)
 	wlink_busy = 0;
       sys_outb(B004_OSR, B004_INT_ENA);
-      usleep(B004_IO_DELAY);
-      sys_inb(B004_OSR, &b);
-      if (!(b & B004_INT_ENA))
-	panic("b004_intr: can't enable output ready interrupt");
     }
   }
 
@@ -233,10 +232,6 @@ static void b004_intr(unsigned int UNUSED(mask)) {
       sys_inb(B004_IDR, &b);
       rlinkbuf[rbuf_write_offset++] = b;
       sys_outb(B004_ISR, B004_INT_ENA);
-      usleep(B004_IO_DELAY);
-      sys_inb(B004_ISR, &b);
-      if (!(b & B004_INT_ENA))
-	panic("b004_intr: can't enable input ready interrupt");
     }
   }
 
