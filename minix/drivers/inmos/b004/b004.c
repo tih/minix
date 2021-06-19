@@ -115,11 +115,20 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   for (;;) {
     int lastavail;		/* hack */
     int deadcount = 0;		/* hack */
-    if (avail >= size) {
-      if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
-				(vir_bytes)rlinkbuf, size)) != OK) {
-	rlink_busy = 0;
-	return ret;
+    int aborting = 0;		/* hack */
+    if ((avail >= size) || aborting) {
+      if (aborting)
+	size = avail;
+      if (size > 0) {
+	ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
+			     (vir_bytes)rlinkbuf, size);
+	if (ret != OK) {
+	  rlink_busy = 0;
+	  return ret;
+	}
+      } else {
+	  rlink_busy = 0;
+	  return ret;
       }
       rbuf_read_offset += size;
       if (rbuf_read_offset == rbuf_write_offset) {
@@ -137,8 +146,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 	deadcount++;
 	if (deadcount > 10) {
 	  printf("b004_read() timing out\n");
-	  rlink_busy = 0;
-	  return 0;
+	  aborting = 1;
 	}
       } else {
 	deadcount = 0;
