@@ -219,6 +219,10 @@ static void b004_intr(unsigned int UNUSED(mask)) {
       if (wbuf_read_offset == wbuf_write_offset)
 	wlink_busy = 0;
       sys_outb(B004_OSR, B004_INT_ENA);
+      usleep(B004_IO_DELAY);
+      sys_inb(B004_OSR, &b);
+      if (!(b & B004_INT_ENA))
+	panic("b004_intr: can't enable output ready interrupt");
     }
   }
 
@@ -229,11 +233,15 @@ static void b004_intr(unsigned int UNUSED(mask)) {
       sys_inb(B004_IDR, &b);
       rlinkbuf[rbuf_write_offset++] = b;
       sys_outb(B004_ISR, B004_INT_ENA);
+      usleep(B004_IO_DELAY);
+      sys_inb(B004_ISR, &b);
+      if (!(b & B004_INT_ENA))
+	panic("b004_intr: can't enable input ready interrupt");
     }
   }
 
   if (sys_irqenable(&irq_hook_id) != OK)
-    panic("b004_intr: couldn't re-enable interrupt");
+    panic("b004_intr: can't re-enable interrupt");
 
   return;
 }
