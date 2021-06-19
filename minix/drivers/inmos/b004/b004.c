@@ -53,6 +53,8 @@ static int rbuf_read_offset, rbuf_write_offset;
 static int wbuf_read_offset, wbuf_write_offset;
 static int rlink_busy, wlink_busy;
 
+static unsigned int b008_intmask = 0;
+
 static int irq_hook_id;
 
 static int board_busy;
@@ -83,10 +85,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   int ret;
   int avail, xfer;
 
-  int lastavail;		/* hack */
-  int deadcount = 0;		/* hack */
-  int aborting = 0;		/* hack */
-
   if (rlink_busy)		return EIO;
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
@@ -116,20 +114,14 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
     return xfer;
   }
 
+  b004_intr(0);
+
   for (;;) {
-    if ((avail >= size) || aborting) {
-      if (aborting)
-	size = avail;
-      if (size > 0) {
-	ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
-			     (vir_bytes)rlinkbuf, size);
-	if (ret != OK) {
-	  rlink_busy = 0;
-	  return ret;
-	}
-      } else {
-	  rlink_busy = 0;
-	  return ret;
+    if (avail >= size) {
+      if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
+				(vir_bytes)rlinkbuf, size)) != OK) {
+	rlink_busy = 0;
+	return ret;
       }
       rbuf_read_offset += size;
       if (rbuf_read_offset == rbuf_write_offset) {
@@ -140,18 +132,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       return size;
     } else {
       usleep(B004_IO_DELAY);
-      lastavail = avail;	/* hack */
-      b004_intr(0);		/* hack while interrupts don't work */
       avail = rbuf_write_offset - rbuf_read_offset;
-      if (avail == lastavail) {	/* hack */
-	deadcount++;
-	if (deadcount > 10) {
-	  printf("b004_read() timing out\n");
-	  aborting = 1;
-	}
-      } else {
-	deadcount = 0;
-      }
     }
   }
   /* NOTREACHED */
@@ -181,10 +162,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (flags & CDEV_NONBLOCK)
     return size;
 
-  while (wbuf_read_offset != wbuf_write_offset) {
+  while (wbuf_read_offset != wbuf_write_offset)
     usleep(B004_IO_DELAY);
-    b004_intr(0);		/* hack while interrupts don't work */
-  }
 
   return size;
 }
@@ -234,28 +213,36 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static void b004_intr(unsigned int UNUSED(mask)) {
   unsigned int b;
 
-  /*  printf("b004_intr() - "); */
+  printf("b004_intr()\n");
+
+  sys_outb(B008_INT, 0);
 
   if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
-    /* printf("writing\n"); */
     sys_inb(B004_OSR, &b);
     if (b & B004_READY) {
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
-      if (wbuf_read_offset == wbuf_write_offset)
+      if (wbuf_read_offset == wbuf_write_offset) {
 	wlink_busy = 0;
-      sys_outb(B004_OSR, B004_INT_ENA);
+	b008_intmask &= ~B008_OUTINT_ENA;
+      } else {
+	b008_intmask |= B008_OUTINT_ENA;
+      }
     }
   }
 
   if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
-    /* printf("reading\n"); */
     sys_inb(B004_ISR, &b);
     if (b & B004_READY) {
       sys_inb(B004_IDR, &b);
       rlinkbuf[rbuf_write_offset++] = b;
-      sys_outb(B004_ISR, B004_INT_ENA);
+      if (rbuf_write_offset < DMA_SIZE)
+	b008_intmask |= B008_INPINT_ENA;
+      else
+	b008_intmask &= ~B008_INPINT_ENA;
     }
   }
+
+  sys_outb(B008_INT, b008_intmask);
 
   if (sys_irqenable(&irq_hook_id) != OK)
     panic("b004_intr: can't re-enable interrupt");
@@ -320,6 +307,8 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   wbuf_write_offset = 0;
 
   if (board_type == 0) {
+    if (type == SEF_INIT_FRESH)
+      b004_reset();
     b004_probe();
     if ((board_type != 0) && (type == SEF_INIT_FRESH)) {
       b004_initialize();
@@ -348,15 +337,8 @@ void b004_probe(void) {
       usleep(B004_IO_DELAY);
       if (b & B004_READY) {
 	board_type = B004;
-	if (sys_inb(B008_INT, &b) == OK) {
-	  usleep(B004_IO_DELAY);
-	  sys_outb(B008_INT, 0);
-	  usleep(B004_IO_DELAY);
-	  sys_inb(B008_INT, &b);
-	  usleep(B004_IO_DELAY);
-	  if ((b & B008_INT_MASK) == 0) {
-	    board_type = B008;
-	  }
+	if (sys_outb(B008_INT, 0) == OK) {
+	  board_type = B008;
 	}
       }
     }
