@@ -179,11 +179,11 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   case B004GETFLAGS:
     flag.b004_board = board_type;
     sys_inb(B004_ISR, &b);
-    flag.readable = b && B004_READY;
+    flag.b004_readable = b && B004_READY;
     sys_inb(B004_OSR, &b);
-    flag.writeable = b && B004_READY;
+    flag.b004_writeable = b && B004_READY;
     sys_inb(B004_ERROR, &b);
-    flag.error = b && B004_HAS_ERROR;
+    flag.b004_error = b && B004_HAS_ERROR;
     ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag,
 			 sizeof(struct b004_flags));
     break;
