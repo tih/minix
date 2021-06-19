@@ -195,7 +195,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 			 sizeof(struct b004_flags));
     break;
   default:
-    printf("b004_ioctl(???)\n");
+    printf("b004_ioctl(BAD)\n");
     ret = EINVAL;
   }
 
