@@ -187,10 +187,14 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     flag.b004_board = board_type;
     sys_inb(B004_ISR, &b);
     flag.b004_readable = b && B004_READY;
+    flag.b004_readintr = b && B004_INT_ENA;
     sys_inb(B004_OSR, &b);
     flag.b004_writeable = b && B004_READY;
+    flag.b004_writeintr = b && B004_INT_ENA;
     sys_inb(B004_ERROR, &b);
     flag.b004_error = b && B004_HAS_ERROR;
+    sys_inb(B008_INT, &b);
+    flag.b004_intrmask = b && B008_INT_MASK;
     ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag,
 			 sizeof(struct b004_flags));
     break;
