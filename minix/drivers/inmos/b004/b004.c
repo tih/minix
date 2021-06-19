@@ -83,6 +83,10 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   int ret;
   int avail, xfer;
 
+  int lastavail;		/* hack */
+  int deadcount = 0;		/* hack */
+  int aborting = 0;		/* hack */
+
   if (rlink_busy)		return EIO;
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
@@ -113,9 +117,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   }
 
   for (;;) {
-    int lastavail;		/* hack */
-    int deadcount = 0;		/* hack */
-    int aborting = 0;		/* hack */
     if ((avail >= size) || aborting) {
       if (aborting)
 	size = avail;
