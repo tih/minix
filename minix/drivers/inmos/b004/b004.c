@@ -129,7 +129,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       rlink_busy = 0;
       return size;
     } else {
-      /* usleep(B004_IO_DELAY); */
+      usleep(B004_IO_DELAY);
       lastavail = avail;	/* hack */
       b004_intr(0);		/* hack while interrupts don't work */
       avail = rbuf_write_offset - rbuf_read_offset;
@@ -170,7 +170,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     return size;
 
   while (wbuf_read_offset != wbuf_write_offset) {
-    /* usleep(B004_IO_DELAY); */
+    usleep(B004_IO_DELAY);
     b004_intr(0);		/* hack while interrupts don't work */
   }
 
