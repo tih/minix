@@ -15,7 +15,7 @@ struct b004_flags {
   unsigned char b004_error;
   unsigned char b004_readintr;
   unsigned char b004_writeintr;
-  unsigned char b004_intrmask;
+  unsigned char b008_intrmask;
 };
 
 #define B004RESET	_IO  ('b', 1)
