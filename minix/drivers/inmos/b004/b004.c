@@ -113,6 +113,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   }
 
   for (;;) {
+    int lastavail;		/* hack */
     if (avail >= size) {
       if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
 				(vir_bytes)rlinkbuf, size)) != OK) {
@@ -128,8 +129,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       return size;
     } else {
       usleep(B004_IO_DELAY);
+      lastavail = avail;	/* hack */
       b004_intr(0);		/* hack while interrupts don't work */
       avail = rbuf_write_offset - rbuf_read_offset;
+      if (avail == lastavail)	/* hack */
+	return 0;		/* hack */
     }
   }
   /* NOTREACHED */
