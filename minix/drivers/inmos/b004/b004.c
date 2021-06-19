@@ -135,8 +135,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       avail = rbuf_write_offset - rbuf_read_offset;
       if (avail == lastavail) {	/* hack */
 	deadcount++;
-	if (deadcount > 10)
+	if (deadcount > 10) {
+	  printf("b004_read() timing out\n");
+	  rlink_busy = 0;
 	  return 0;
+	}
       } else {
 	deadcount = 0;
       }
