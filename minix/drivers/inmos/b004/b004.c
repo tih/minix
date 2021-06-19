@@ -63,6 +63,7 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
   if (board_busy)
     return EAGAIN;
 
+  printf("b004_open()\n");
   board_busy = 1;
 
   return OK;
@@ -70,6 +71,7 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 
 static int b004_close(devminor_t UNUSED(minor)) {
 
+  printf("b004_close()\n");
   board_busy = 0;
 
   return OK;
@@ -85,6 +87,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
 
+  printf("b004_read(%d)\n", size);
   rlink_busy = 1;
 
   avail = rbuf_write_offset - rbuf_read_offset;
@@ -140,6 +143,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
 
+  printf("b004_write(%d)\n", size);
   wlink_busy = 1;
 
   if ((ret = sys_safecopyfrom(endpt, grant,
@@ -169,14 +173,17 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 
   switch (request) {
   case B004RESET:
+    printf("b004_ioctl(RESET)\n");
     b004_reset();
     ret = OK;
     break;
   case B004ANALYSE:
+    printf("b004_ioctl(ANALYSE)\n");
     b004_analyse();
     ret = OK;
     break;
   case B004GETFLAGS:
+    printf("b004_ioctl(GETFLAGS)\n");
     flag.b004_board = board_type;
     sys_inb(B004_ISR, &b);
     flag.b004_readable = b && B004_READY;
@@ -188,6 +195,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 			 sizeof(struct b004_flags));
     break;
   default:
+    printf("b004_ioctl(???)\n");
     ret = EINVAL;
   }
 
@@ -197,7 +205,10 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static void b004_intr(unsigned int UNUSED(mask)) {
   unsigned int b;
 
+  printf("b004_intr() - ");
+
   if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
+    printf("writing\n");
     sys_inb(B004_OSR, &b);
     if (b & B004_READY) {
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
@@ -208,6 +219,7 @@ static void b004_intr(unsigned int UNUSED(mask)) {
   }
 
   if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
+    printf("reading\n");
     sys_inb(B004_ISR, &b);
     if (b & B004_READY) {
       sys_inb(B004_IDR, &b);
