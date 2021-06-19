@@ -1,8 +1,10 @@
 #include <minix/drivers.h>
 #include <minix/chardriver.h>
+#include <sys/ioc_b004.h>
+#include <minix/ds.h>
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <minix/ds.h>
 
 #include "b004.h"
 
@@ -53,19 +55,22 @@ static int rlink_busy, wlink_busy;
 
 static int irq_hook_id;
 
-static int open_counter;
+static int board_busy;
 
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 		     endpoint_t UNUSED(user_endpt)) {
 
-  printf("b004_open(). Called %d time(s).\n", ++open_counter);
+  if (board_busy)
+    return EAGAIN;
+
+  board_busy = 1;
 
   return OK;
 }
 
 static int b004_close(devminor_t UNUSED(minor)) {
 
-  printf("b004_close()\n");
+  board_busy = 0;
 
   return OK;
 }
@@ -155,14 +160,38 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   return size;
 }
 
-static int b004_ioctl(devminor_t UNUSED(minor), unsigned long UNUSED(request),
-		      endpoint_t UNUSED(endpt), cp_grant_id_t UNUSED(grant),
-		      int UNUSED(flags), endpoint_t UNUSED(user_endpt),
-		      cdev_id_t UNUSED(id)) {
+static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
+		      endpoint_t endpt, cp_grant_id_t grant, int UNUSED(flags),
+		      endpoint_t UNUSED(user_endpt), cdev_id_t UNUSED(id)) {
+  int ret;
+  unsigned int b;
+  struct b004_flags flag;
 
-  /* Should have reset, analyse, getflags, and setflags */
+  switch (request) {
+  case B004RESET:
+    b004_reset();
+    ret = OK;
+    break;
+  case B004ANALYSE:
+    b004_analyse();
+    ret = OK;
+    break;
+  case B004GETFLAGS:
+    flag.b004_board = board_type;
+    sys_inb(B004_ISR, &b);
+    flag.readable = b && B004_READY;
+    sys_inb(B004_OSR, &b);
+    flag.writeable = b && B004_READY;
+    sys_inb(B004_ERROR, &b);
+    flag.error = b && B004_HAS_ERROR;
+    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag,
+			 sizeof(struct b004_flags));
+    break;
+  default:
+    ret = EINVAL;
+  }
 
-  return EINVAL;
+  return ret;
 }
 
 static void b004_intr(unsigned int UNUSED(mask)) {
@@ -195,7 +224,7 @@ static void b004_intr(unsigned int UNUSED(mask)) {
 
 static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 
-  ds_publish_u32("open_counter", open_counter, DSF_OVERWRITE);
+  ds_publish_u32("board_busy", board_busy, DSF_OVERWRITE);
 
   return OK;
 }
@@ -203,9 +232,9 @@ static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 static int lu_state_restore() {
   u32_t value;
 
-  ds_retrieve_u32("open_counter", &value);
-  ds_delete_u32("open_counter");
-  open_counter = (int) value;
+  ds_retrieve_u32("board_busy", &value);
+  ds_delete_u32("board_busy");
+  board_busy = (int) value;
 
   return OK;
 }
@@ -293,9 +322,11 @@ void b004_probe(void) {
     }
   }
 
-  if (board_type)
+  if (board_type) {
     printf("Probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
+    board_busy = 0;
+  }
 }
 
 void b004_initialize(void) {
