@@ -114,6 +114,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 
   for (;;) {
     int lastavail;		/* hack */
+    int deadcount = 0;		/* hack */
     if (avail >= size) {
       if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
 				(vir_bytes)rlinkbuf, size)) != OK) {
@@ -128,12 +129,17 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       rlink_busy = 0;
       return size;
     } else {
-      usleep(B004_IO_DELAY);
+      /* usleep(B004_IO_DELAY); */
       lastavail = avail;	/* hack */
       b004_intr(0);		/* hack while interrupts don't work */
       avail = rbuf_write_offset - rbuf_read_offset;
-      if (avail == lastavail)	/* hack */
-	return 0;		/* hack */
+      if (avail == lastavail) {	/* hack */
+	deadcount++;
+	if (deadcount > 10)
+	  return 0;
+      } else {
+	deadcount = 0;
+      }
     }
   }
   /* NOTREACHED */
@@ -164,7 +170,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     return size;
 
   while (wbuf_read_offset != wbuf_write_offset) {
-    usleep(B004_IO_DELAY);
+    /* usleep(B004_IO_DELAY); */
     b004_intr(0);		/* hack while interrupts don't work */
   }
 
@@ -216,10 +222,10 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static void b004_intr(unsigned int UNUSED(mask)) {
   unsigned int b;
 
-  printf("b004_intr() - ");
+  /*  printf("b004_intr() - "); */
 
   if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
-    printf("writing\n");
+    /* printf("writing\n"); */
     sys_inb(B004_OSR, &b);
     if (b & B004_READY) {
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
@@ -230,7 +236,7 @@ static void b004_intr(unsigned int UNUSED(mask)) {
   }
 
   if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
-    printf("reading\n");
+    /* printf("reading\n"); */
     sys_inb(B004_ISR, &b);
     if (b & B004_READY) {
       sys_inb(B004_IDR, &b);
