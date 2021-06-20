@@ -206,10 +206,10 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   return ret;
 }
 
-static void b004_intr(unsigned int UNUSED(mask)) {
+static void b004_intr(unsigned int mask) {
   unsigned int b;
 
-  printf("b004_intr()\n");
+  printf("b004_intr(%d)\n", mask);
 
   if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
     sys_inb(B004_OSR, &b);
