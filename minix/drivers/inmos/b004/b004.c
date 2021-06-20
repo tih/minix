@@ -215,17 +215,19 @@ static void b004_intr(unsigned int UNUSED(mask)) {
 
   printf("b004_intr()\n");
 
-  sys_outb(B008_INT, 0);
-
   if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
     sys_inb(B004_OSR, &b);
     if (b & B004_READY) {
+      b008_intmask &= ~B008_OUTINT_ENA;
+      sys_outb(B008_INT, b008_intmask);
+      sys_outb(B004_OSR, B004_INT_DIS);
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
       if (wbuf_read_offset == wbuf_write_offset) {
 	wlink_busy = 0;
-	b008_intmask &= ~B008_OUTINT_ENA;
       } else {
 	b008_intmask |= B008_OUTINT_ENA;
+	sys_outb(B008_INT, b008_intmask);
+	sys_outb(B004_ISR, B004_INT_ENA);
       }
     }
   }
@@ -233,19 +235,18 @@ static void b004_intr(unsigned int UNUSED(mask)) {
   if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
     sys_inb(B004_ISR, &b);
     if (b & B004_READY) {
+      b008_intmask &= ~B008_INPINT_ENA;
+      sys_outb(B008_INT, b008_intmask);
+      sys_outb(B004_ISR, B004_INT_DIS);
       sys_inb(B004_IDR, &b);
       rlinkbuf[rbuf_write_offset++] = b;
-      if (rbuf_write_offset < DMA_SIZE)
+      if (rbuf_write_offset < DMA_SIZE) {
 	b008_intmask |= B008_INPINT_ENA;
-      else
-	b008_intmask &= ~B008_INPINT_ENA;
+	sys_outb(B008_INT, b008_intmask);
+	sys_outb(B004_ISR, B004_INT_ENA);
+      }
     }
   }
-
-  sys_outb(B008_INT, b008_intmask);
-
-  if (sys_irqenable(&irq_hook_id) != OK)
-    panic("b004_intr: can't re-enable interrupt");
 
   return;
 }
@@ -315,8 +316,8 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     }
   }
 
-  irq_hook_id = 0;
-  if (sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK)
+  irq_hook_id = B004_IRQ;
+  if (sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK)
     panic("sef_cb_init: couldn't set interrupt policy");
 
   if (type == SEF_INIT_LU)
