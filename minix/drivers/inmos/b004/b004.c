@@ -53,7 +53,7 @@ static int rbuf_read_offset, rbuf_write_offset;
 static int wbuf_read_offset, wbuf_write_offset;
 static int rlink_busy, wlink_busy;
 
-static unsigned int b008_intmask = 0;
+static unsigned int b008_intmask = B008_OUTINT_ENA | B008_INPINT_ENA;
 
 static int irq_hook_id;
 
@@ -191,14 +191,10 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     flag.b004_board = board_type;
     sys_inb(B004_ISR, &b);
     flag.b004_readable = b & B004_READY;
-    flag.b004_readintr = b & B004_INT_ENA;
     sys_inb(B004_OSR, &b);
     flag.b004_writeable = b & B004_READY;
-    flag.b004_writeintr = b & B004_INT_ENA;
     sys_inb(B004_ERROR, &b);
     flag.b004_error = b & B004_HAS_ERROR;
-    sys_inb(B008_INT, &b);
-    flag.b008_intrmask = b & B008_INT_MASK;
     ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag,
 			 sizeof(struct b004_flags));
     break;
@@ -220,14 +216,12 @@ static void b004_intr(unsigned int UNUSED(mask)) {
     if (b & B004_READY) {
       b008_intmask &= ~B008_OUTINT_ENA;
       sys_outb(B008_INT, b008_intmask);
-      sys_outb(B004_OSR, B004_INT_DIS);
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
       if (wbuf_read_offset == wbuf_write_offset) {
 	wlink_busy = 0;
       } else {
 	b008_intmask |= B008_OUTINT_ENA;
 	sys_outb(B008_INT, b008_intmask);
-	sys_outb(B004_ISR, B004_INT_ENA);
       }
     }
   }
@@ -237,13 +231,11 @@ static void b004_intr(unsigned int UNUSED(mask)) {
     if (b & B004_READY) {
       b008_intmask &= ~B008_INPINT_ENA;
       sys_outb(B008_INT, b008_intmask);
-      sys_outb(B004_ISR, B004_INT_DIS);
       sys_inb(B004_IDR, &b);
       rlinkbuf[rbuf_write_offset++] = b;
       if (rbuf_write_offset < DMA_SIZE) {
 	b008_intmask |= B008_INPINT_ENA;
 	sys_outb(B008_INT, b008_intmask);
-	sys_outb(B004_ISR, B004_INT_ENA);
       }
     }
   }
@@ -316,7 +308,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     }
   }
 
-  irq_hook_id = 0;
+  irq_hook_id = B004_IRQ;
   if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
       (sys_irqenable(&irq_hook_id) != OK))
     panic("sef_cb_init: couldn't enable interrupts");
