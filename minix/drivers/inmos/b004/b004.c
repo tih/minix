@@ -308,6 +308,8 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     }
   }
 
+  if (board_type == B008)
+    sys_outb(B008_INT, b008_intmask);
   irq_hook_id = B004_IRQ;
   if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
       (sys_irqenable(&irq_hook_id) != OK))
