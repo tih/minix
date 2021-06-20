@@ -316,9 +316,10 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     }
   }
 
-  irq_hook_id = B004_IRQ;
-  if (sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK)
-    panic("sef_cb_init: couldn't set interrupt policy");
+  irq_hook_id = 0;
+  if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
+      (sys_irqenable(&irq_hook_id) != OK))
+    panic("sef_cb_init: couldn't enable interrupts");
 
   if (type == SEF_INIT_LU)
     lu_state_restore();
