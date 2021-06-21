@@ -83,7 +83,7 @@ static int b004_close(devminor_t UNUSED(minor)) {
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			 int flags, cdev_id_t UNUSED(id)) {
-  int ret, i, b, xfer;
+  int ret, i, b;
   clock_t now, deadline;
 
   if (rlink_busy)		return EIO;
@@ -91,6 +91,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   if (size > DMA_SIZE)		return EINVAL;
 
   printf("b004_read(%d)\n", size);
+
   rlink_busy = 1;
 
   getuptime(&now, NULL, NULL);
@@ -101,31 +102,30 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       sys_inb(B004_ISR, &b);
       if (b & B004_READY) {
 	sys_inb(B004_IDR, &b);
-	rlinkbuf[i++] = b;
-      }
-      getuptime(&now, NULL, NULL);
-      if (now > deadline) {
-	xfer = MIN(i, size);
-	goto out;
-      }
-      if (i == size) {
-	xfer = size;
+	rlinkbuf[i] = b;
+      } else {
+	getuptime(&now, NULL, NULL);
+	if (now > deadline) {
+	  goto out;
+	}
       }
     }
   }
  out:
   rlink_busy = 0;
+  if (i == 0)
+    return EAGAIN;
   if ((ret = sys_safecopyto(endpt, grant,
-			    0, (vir_bytes)rlinkbuf, xfer)) != OK)
+			    0, (vir_bytes)rlinkbuf, i)) != OK)
     return ret;
   else
-    return xfer;
+    return i;
 }
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			  int flags, cdev_id_t UNUSED(id)) {
-  int ret, i, b, xfer;
+  int ret, i, b;
   clock_t now, deadline;
 
   if (wlink_busy)		return EIO;
@@ -146,20 +146,22 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   for (i = 0; i < size; i++) {
     while (1) {
       sys_inb(B004_OSR, &b);
-      if (b & B004_READY)
-	sys_outb(B004_ODR, wlinkbuf[i++]);
-      getuptime(&now, NULL, NULL);
-      xfer = i;
-      if (now > deadline)
-	goto out;
+      if (b & B004_READY) {
+	sys_outb(B004_ODR, wlinkbuf[i]);
+      } else {
+	getuptime(&now, NULL, NULL);
+	if (now > deadline) {
+	  goto out;
+	}
+      }
     }
   }
  out:
   wlink_busy = 0;
-  if (xfer == 0)
+  if (i == 0)
     return EAGAIN;
   else
-    return xfer;
+    return i;
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
