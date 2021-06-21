@@ -298,17 +298,21 @@ void b004_probe(void) {
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
 	sys_outb(B004_OSR, B004_INT_ENA);
-	usleep(B004_IO_DELAY);
+	usleep(B004_RST_DELAY);
+	sys_outb(B004_OSR, B004_INT_DIS);
 	if (probe_int_seen) {
+	  printf("got the B004 interrupt\n");
 	  board_type = B004;
 	} else {
-	  sys_outb(B004_OSR, B004_INT_DIS);
 	  sys_outb(B008_INT, B008_OUTINT_ENA);
 	  sys_outb(B004_OSR, B004_INT_ENA);
-	  usleep(B004_IO_DELAY);
-	  if (probe_int_seen)
-	    board_type = B008;
+	  usleep(B004_RST_DELAY);
 	  sys_outb(B004_OSR, B004_INT_DIS);
+	  sys_outb(B004_OSR, B004_INT_DIS);
+	  if (probe_int_seen) {
+	    printf("got the B008 interrupt\n");
+	    board_type = B008;
+	  }
 	  if (board_type == B008)
 	    sys_outb(B008_INT, b008_intmask);
 	}
