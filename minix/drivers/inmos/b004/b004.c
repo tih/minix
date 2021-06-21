@@ -272,8 +272,9 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 
   if (sys_getinfo(GET_HZ, &system_hz, sizeof(system_hz), 0, 0) != OK)
     panic("sef_cb_init: couldn't get system HZ value");
+  printf("sef_cb_init: system HZ value is %d\n", system_hz);
   
-  b004_io_timeout = system_hz;  
+  b004_io_timeout = system_hz;
 
   if (board_type == B008)
     sys_outb(B008_INT, b008_intmask);
