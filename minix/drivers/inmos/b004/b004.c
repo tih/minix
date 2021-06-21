@@ -68,6 +68,12 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
   if (board_busy)
     return EAGAIN;
 
+  if (board_type == 0)
+    b004_probe();
+
+  if (board_type == 0)
+    return EINVAL;
+
   board_busy = 1;
 
   return OK;
@@ -259,15 +265,6 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     wlinkbuf_phys += (DMA_ALIGN - off);
   }
 
-  if (board_type == 0) {
-    if (type == SEF_INIT_FRESH)
-      b004_reset();
-    b004_probe();
-    if ((board_type != 0) && (type == SEF_INIT_FRESH)) {
-      b004_initialize();
-    }
-  }
-
   if (sys_getinfo(GET_HZ, &system_hz, sizeof(system_hz), 0, 0) != OK)
     panic("sef_cb_init: couldn't get system HZ value");
   
@@ -284,6 +281,8 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 
 void b004_probe(void) {
   unsigned int b;
+
+  b004_reset();
 
   if (sys_outb(B004_OSR, 0) == OK) {
     if (sys_inb(B004_OSR, &b) == OK) {
@@ -328,19 +327,6 @@ void b004_probe(void) {
   }
 }
 
-void b004_initialize(void) {
-
-  b004_reset();
-  sys_outb(B004_ISR, B004_INT_DIS);
-  usleep(B004_IO_DELAY);
-  sys_outb(B004_OSR, B004_INT_DIS);
-  usleep(B004_IO_DELAY);
-  if (board_type == B008) {
-    sys_outb(B008_INT, B008_INT_DIS);
-    usleep(B004_IO_DELAY);
-  }
-}
-
 void b004_reset(void) {
 
   sys_outb(B004_ANALYSE, 0);
@@ -373,8 +359,7 @@ int main(void) {
 
   sef_local_startup();
 
-  if (board_type != 0)
-    chardriver_task(&b004_tab);
+  chardriver_task(&b004_tab);
 
   return OK;
 }
