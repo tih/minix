@@ -49,9 +49,9 @@ static int board_type = 0;
 
 static unsigned char *rlinkbuf, *wlinkbuf;
 static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
-static int rbuf_read_offset, rbuf_write_offset;
-static int wbuf_read_offset, wbuf_write_offset;
 static int rlink_busy, wlink_busy;
+
+static int b004_io_timeout = system_hz; /* one second */
 
 static unsigned int b008_intmask = B008_ERRINT_ENA;
 
@@ -82,8 +82,8 @@ static int b004_close(devminor_t UNUSED(minor)) {
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			 int flags, cdev_id_t UNUSED(id)) {
-  int ret;
-  int avail, xfer;
+  int ret, i, b, xfer;
+  clock_t now, deadline;
 
   if (rlink_busy)		return EIO;
   if (size <= 0)		return EINVAL;
@@ -92,80 +92,73 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   printf("b004_read(%d)\n", size);
   rlink_busy = 1;
 
-  avail = rbuf_write_offset - rbuf_read_offset;
+  getuptime(&now, NULL, NULL);
+  deadline = now + b004_io_timeout;
 
-  if (flags & CDEV_NONBLOCK) {
-    if (avail == 0) {
-      rlink_busy = 0;
-      return EAGAIN;
+  for (i = 0; i < size; i++) {
+    while (1) {
+      sys_inb(B004_ISR, &b);
+      if (b & B004_READY) {
+	sys_inb(B004_IDR, &b);
+	rlinkbuf[i++] = b;
+      }
+      getuptime(&now, NULL, NULL);
+      if (now > deadline) {
+	xfer = MIN(i, size);
+	goto out;
+      }
+      if (i == size) {
+	xfer = size;
+      }
     }
-    xfer = MIN(avail, size);
-    if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
-			      (vir_bytes)rlinkbuf, xfer)) != OK) {
-      rlink_busy = 0;
-      return ret;
-    }
-    rbuf_read_offset += xfer;
-    if (rbuf_read_offset == rbuf_write_offset) {
-      rbuf_read_offset = 0;
-      rbuf_write_offset = 0;
-    }
-    rlink_busy = 0;
+  }
+ out:
+  rlink_busy = 0;
+  if ((ret = sys_safecopyto(endpt, grant,
+			    0, (vir_bytes)rlinkbuf, xfer)) != OK)
+    return ret;
+  else
     return xfer;
-  }
-
-  b004_intr(0);
-
-  for (;;) {
-    if (avail >= size) {
-      if ((ret = sys_safecopyto(endpt, grant, rbuf_read_offset,
-				(vir_bytes)rlinkbuf, size)) != OK) {
-	rlink_busy = 0;
-	return ret;
-      }
-      rbuf_read_offset += size;
-      if (rbuf_read_offset == rbuf_write_offset) {
-	rbuf_read_offset = 0;
-	rbuf_write_offset = 0;
-      }
-      rlink_busy = 0;
-      return size;
-    } else {
-      usleep(B004_IO_DELAY);
-      avail = rbuf_write_offset - rbuf_read_offset;
-    }
-  }
-  /* NOTREACHED */
 }
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			  int flags, cdev_id_t UNUSED(id)) {
-  int ret;
+  int ret, i, b;
+  clock_t now, deadline;
 
   if (wlink_busy)		return EIO;
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
 
   printf("b004_write(%d)\n", size);
-  wlink_busy = 1;
 
   if ((ret = sys_safecopyfrom(endpt, grant,
 			      0, (vir_bytes)wlinkbuf, size)) != OK)
     return ret;
 
-  wbuf_read_offset = 0;
-  wbuf_write_offset = size;
+  wlink_busy = 1;
 
-  b004_intr(0);
+  getuptime(&now, NULL, NULL);
+  deadline = now + b004_io_timeout;
 
-  if (flags & CDEV_NONBLOCK)
-    return size;
-
-  while (wbuf_read_offset != wbuf_write_offset)
-    usleep(B004_IO_DELAY);
-
-  return size;
+  for (i = 0; i < size; i++) {
+    while (1) {
+      sys_inb(B004_OSR, &b);
+      if (b & B004_READY)
+	sys_outb(B004_ODR, wlinkbuf[i++]);
+      getuptime(&now, NULL, NULL);
+      xfer = i;
+      if (now > deadline)
+	goto out;
+    }
+  }
+ out:
+  wlink_busy = 0;
+  if (xfer == 0)
+    return EAGAIN;
+  else
+    return xfer;
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
@@ -210,39 +203,6 @@ static void b004_intr(unsigned int mask) {
   unsigned int b;
 
   printf("b004_intr(%d)\n", mask);
-
-  if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
-    sys_inb(B004_OSR, &b);
-    if (b & B004_READY) {
-      sys_outb(B004_OSR, B004_INT_DIS);
-      b008_intmask &= ~B008_OUTINT_ENA;
-      sys_outb(B008_INT, b008_intmask);
-      sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
-      if (wbuf_read_offset == wbuf_write_offset) {
-	wlink_busy = 0;
-      } else {
-	b008_intmask |= B008_OUTINT_ENA;
-	sys_outb(B008_INT, b008_intmask);
-	sys_outb(B004_OSR, B004_INT_ENA);
-      }
-    }
-  }
-
-  if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
-    sys_inb(B004_ISR, &b);
-    if (b & B004_READY) {
-      sys_outb(B004_ISR, B004_INT_DIS);
-      b008_intmask &= ~B008_INPINT_ENA;
-      sys_outb(B008_INT, b008_intmask);
-      sys_inb(B004_IDR, &b);
-      rlinkbuf[rbuf_write_offset++] = b;
-      if (rbuf_write_offset < DMA_SIZE) {
-	b008_intmask |= B008_INPINT_ENA;
-	sys_outb(B008_INT, b008_intmask);
-	sys_outb(B004_ISR, B004_INT_ENA);
-      }
-    }
-  }
 
   return;
 }
