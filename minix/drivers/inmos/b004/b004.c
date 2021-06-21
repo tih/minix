@@ -124,7 +124,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			  int flags, cdev_id_t UNUSED(id)) {
-  int ret, i, b;
+  int ret, i, b, xfer;
   clock_t now, deadline;
 
   if (wlink_busy)		return EIO;
@@ -257,11 +257,6 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     wlinkbuf += (DMA_ALIGN - off);
     wlinkbuf_phys += (DMA_ALIGN - off);
   }
-
-  rbuf_read_offset = 0;
-  rbuf_write_offset = 0;
-  wbuf_read_offset = 0;
-  wbuf_write_offset = 0;
 
   if (board_type == 0) {
     if (type == SEF_INIT_FRESH)
