@@ -90,8 +90,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
 
-  printf("b004_read(%d)\n", size);
-
   rlink_busy = 1;
 
   getuptime(&now, NULL, NULL);
@@ -112,16 +110,17 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       }
     }
   }
+
  out:
   rlink_busy = 0;
-  printf("b004_read() read %d bytes\n", i);
-  if (i == 0)
-    return EAGAIN;
-  if ((ret = sys_safecopyto(endpt, grant,
-			    0, (vir_bytes)rlinkbuf, i)) != OK)
-    return ret;
-  else
+
+  if (i > 0)
+    ret = sys_safecopyto(endpt, grant,
+			 0, (vir_bytes)rlinkbuf, i);
+  if (ret == OK)
     return i;
+  else
+    return ret;
 }
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
@@ -133,8 +132,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (wlink_busy)		return EIO;
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
-
-  printf("b004_write(%d)\n", size);
 
   if ((ret = sys_safecopyfrom(endpt, grant,
 			      0, (vir_bytes)wlinkbuf, size)) != OK)
@@ -159,13 +156,11 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
       }
     }
   }
+
  out:
   wlink_busy = 0;
-  printf("b004_write() wrote %d bytes\n", i);
-  if (i == 0)
-    return EAGAIN;
-  else
-    return i;
+
+  return i;
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
@@ -177,17 +172,14 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 
   switch (request) {
   case B004RESET:
-    printf("b004_ioctl(RESET)\n");
     b004_reset();
     ret = OK;
     break;
   case B004ANALYSE:
-    printf("b004_ioctl(ANALYSE)\n");
     b004_analyse();
     ret = OK;
     break;
   case B004GETFLAGS:
-    printf("b004_ioctl(GETFLAGS)\n");
     flag.b004_board = board_type;
     sys_inb(B004_ISR, &b);
     flag.b004_readable = b & B004_READY;
@@ -199,7 +191,6 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 			 sizeof(struct b004_flags));
     break;
   default:
-    printf("b004_ioctl(BAD)\n");
     ret = EINVAL;
   }
 
@@ -276,7 +267,6 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 
   if (sys_getinfo(GET_HZ, &system_hz, sizeof(system_hz), 0, 0) != OK)
     panic("sef_cb_init: couldn't get system HZ value");
-  printf("sef_cb_init: system HZ value is %d\n", system_hz);
   
   b004_io_timeout = system_hz;
 
@@ -342,8 +332,6 @@ void b004_reset(void) {
   usleep(B004_RST_DELAY);
   sys_outb(B004_RESET, 0);
   usleep(B004_RST_DELAY);
-  printf("The %s device has been reset.\n",
-	 board_type == B004 ? "B004" : "B008");
 }
 
 void b004_analyse(void) {
@@ -360,8 +348,6 @@ void b004_analyse(void) {
   usleep(B004_RST_DELAY);
   sys_outb(B004_ANALYSE, 0);
   usleep(B004_RST_DELAY);
-  printf("The %s device is now in analyse mode.\n",
-	 board_type == B004 ? "B004" : "B008");
 }
 
 int main(void) {
