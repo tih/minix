@@ -214,6 +214,7 @@ static void b004_intr(unsigned int mask) {
   if (wlink_busy && (wbuf_read_offset != wbuf_write_offset)) {
     sys_inb(B004_OSR, &b);
     if (b & B004_READY) {
+      sys_outb(B004_OSR, B004_INT_DIS);
       b008_intmask &= ~B008_OUTINT_ENA;
       sys_outb(B008_INT, b008_intmask);
       sys_outb(B004_ODR, wlinkbuf[wbuf_read_offset++]);
@@ -230,6 +231,7 @@ static void b004_intr(unsigned int mask) {
   if (rlink_busy && (rbuf_write_offset < DMA_SIZE)) {
     sys_inb(B004_ISR, &b);
     if (b & B004_READY) {
+      sys_outb(B004_ISR, B004_INT_DIS);
       b008_intmask &= ~B008_INPINT_ENA;
       sys_outb(B008_INT, b008_intmask);
       sys_inb(B004_IDR, &b);
