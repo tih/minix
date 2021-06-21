@@ -46,6 +46,8 @@ static struct chardriver b004_tab = {
 };
 
 static int board_type = 0;
+static int probe_active;
+static int probe_int_seen;
 
 static unsigned char *rlinkbuf, *wlinkbuf;
 static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
@@ -66,7 +68,6 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
   if (board_busy)
     return EAGAIN;
 
-  printf("b004_open()\n");
   board_busy = 1;
 
   return OK;
@@ -74,7 +75,6 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 
 static int b004_close(devminor_t UNUSED(minor)) {
 
-  printf("b004_close()\n");
   board_busy = 0;
 
   return OK;
@@ -202,6 +202,9 @@ static void b004_intr(unsigned int mask) {
 
   printf("b004_intr(%d)\n", mask);
 
+  if (probe_active)
+    probe_int_seen = 1;
+
   return;
 }
 
@@ -270,13 +273,6 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   
   b004_io_timeout = system_hz;
 
-  if (board_type == B008)
-    sys_outb(B008_INT, b008_intmask);
-  irq_hook_id = B004_IRQ;
-  if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
-      (sys_irqenable(&irq_hook_id) != OK))
-    panic("sef_cb_init: couldn't enable interrupts");
-
   if (type == SEF_INIT_LU)
     lu_state_restore();
 
@@ -290,20 +286,39 @@ void b004_probe(void) {
   unsigned int b;
 
   if (sys_outb(B004_OSR, 0) == OK) {
-    usleep(B004_IO_DELAY);
     if (sys_inb(B004_OSR, &b) == OK) {
-      usleep(B004_IO_DELAY);
       if (b & B004_READY) {
 	board_type = B004;
-	if (sys_outb(B008_INT, B008_INT_DIS) == OK) {
-	  board_type = B008;
+	probe_active = 1;
+	probe_int_seen = 0;
+	sys_outb(B008_INT, B008_INT_DIS);
+	sys_outb(B004_OSR, B004_INT_DIS);
+	irq_hook_id = B004_IRQ;
+	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
+	    (sys_irqenable(&irq_hook_id) != OK))
+	  panic("sef_cb_init: couldn't enable interrupts");
+	sys_outb(B004_OSR, B004_INT_ENA);
+	usleep(B004_IO_DELAY);
+	if (probe_int_seen) {
+	  board_type = B004;
+	} else {
+	  sys_outb(B004_OSR, B004_INT_DIS);
+	  sys_outb(B008_INT, B008_OUTINT_ENA);
+	  sys_outb(B004_OSR, B004_INT_ENA);
+	  usleep(B004_IO_DELAY);
+	  if (probe_int_seen)
+	    board_type = B008;
+	  sys_outb(B004_OSR, B004_INT_DIS);
+	  if (board_type == B008)
+	    sys_outb(B008_INT, b008_intmask);
 	}
+	probe_active = 0;
       }
     }
   }
 
   if (board_type) {
-    printf("Probe found a %s device.\n",
+    printf("b004: found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
     board_busy = 0;
   }
