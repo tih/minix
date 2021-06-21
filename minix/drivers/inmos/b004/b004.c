@@ -51,7 +51,7 @@ static unsigned char *rlinkbuf, *wlinkbuf;
 static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
 static int rlink_busy, wlink_busy;
 
-extern u32_t system_hz;
+static u32_t system_hz;
 static int b004_io_timeout;
 
 static unsigned int b008_intmask = B008_ERRINT_ENA;
@@ -268,14 +268,15 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     }
   }
 
+  sys_getinfo(GET_HZ, &system_hz, sizeof(system_hz), 0, 0);
+  b004_io_timeout = system_hz;  
+
   if (board_type == B008)
     sys_outb(B008_INT, b008_intmask);
   irq_hook_id = B004_IRQ;
   if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
       (sys_irqenable(&irq_hook_id) != OK))
     panic("sef_cb_init: couldn't enable interrupts");
-
-  b004_io_timeout = system_hz;
 
   if (type == SEF_INIT_LU)
     lu_state_restore();
