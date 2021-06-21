@@ -103,6 +103,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
       if (b & B004_READY) {
 	sys_inb(B004_IDR, &b);
 	rlinkbuf[i] = b;
+	break;
       } else {
 	getuptime(&now, NULL, NULL);
 	if (now > deadline) {
@@ -113,6 +114,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   }
  out:
   rlink_busy = 0;
+  printf("b004_read() read %d bytes\n", i);
   if (i == 0)
     return EAGAIN;
   if ((ret = sys_safecopyto(endpt, grant,
@@ -148,6 +150,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
       sys_inb(B004_OSR, &b);
       if (b & B004_READY) {
 	sys_outb(B004_ODR, wlinkbuf[i]);
+	break;
       } else {
 	getuptime(&now, NULL, NULL);
 	if (now > deadline) {
@@ -158,6 +161,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
  out:
   wlink_busy = 0;
+  printf("b004_write() wrote %d bytes\n", i);
   if (i == 0)
     return EAGAIN;
   else
