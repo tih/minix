@@ -47,7 +47,7 @@ static struct chardriver b004_tab = {
 
 static int board_type = 0;
 static int probe_active;
-static int probe_int_seen;
+static volatile int probe_int_seen;
 
 static unsigned char *rlinkbuf, *wlinkbuf;
 static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
@@ -297,6 +297,7 @@ void b004_probe(void) {
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
 	sys_outb(B004_OSR, B004_INT_ENA);
+	sys_outb(B004_ODR, 0);
 	usleep(B004_RST_DELAY);
 	sys_outb(B004_OSR, B004_INT_DIS);
 	if (probe_int_seen) {
@@ -305,6 +306,7 @@ void b004_probe(void) {
 	} else {
 	  sys_outb(B008_INT, B008_OUTINT_ENA);
 	  sys_outb(B004_OSR, B004_INT_ENA);
+	  sys_outb(B004_ODR, 0);
 	  usleep(B004_RST_DELAY);
 	  sys_outb(B004_OSR, B004_INT_DIS);
 	  sys_outb(B004_OSR, B004_INT_DIS);
