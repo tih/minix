@@ -208,12 +208,8 @@ static void b004_intr(unsigned int mask) {
 
   printf("b004_intr(%d)\n", mask);
 
-  sys_outb(B008_INT, B008_INT_DIS);
-
   if (probe_active)
     probe_int_seen = 1;
-
-  sys_outb(B008_INT, b008_intmask);
 
   return;
 }
@@ -296,6 +292,7 @@ void b004_probe(void) {
 	probe_int_seen = 0;
 	sys_outb(B008_INT, B008_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_DIS);
+	sys_outb(B004_ISR, B004_INT_ENA);
 	irq_hook_id = B004_IRQ;
 	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
@@ -308,12 +305,10 @@ void b004_probe(void) {
 	  printf("got the B004 interrupt\n");
 	  board_type = B004;
 	} else {
-	  usleep(B004_IO_DELAY);
 	  sys_outb(B008_INT, B008_OUTINT_ENA);
 	  sys_outb(B004_OSR, B004_INT_ENA);
 	  sys_outb(B004_ODR, 0);
 	  usleep(B004_RST_DELAY);
-	  sys_outb(B004_OSR, B004_INT_DIS);
 	  sys_outb(B004_OSR, B004_INT_DIS);
 	  if (probe_int_seen) {
 	    printf("got the B008 interrupt\n");
@@ -330,7 +325,7 @@ void b004_probe(void) {
 	   board_type == B004 ? "B004" : "B008");
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);
-    if (board_type == B008)
+    /*    if (board_type == B008) */
       sys_outb(B008_INT, b008_intmask);
     board_busy = 0;
   }
