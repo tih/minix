@@ -175,6 +175,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   int ret;
   unsigned int b;
   struct b004_flags flag;
+  int timeout;
 
   switch (request) {
   case B004RESET:
@@ -193,8 +194,17 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     flag.b004_writeable = b & B004_READY;
     sys_inb(B004_ERROR, &b);
     flag.b004_error = b & B004_HAS_ERROR;
-    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag,
-			 sizeof(struct b004_flags));
+    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag, sizeof flag);
+    break;
+  case B004GETTIMEOUT:
+    timeout = (b004_io_timeout * 10) / system_hz;
+    ret = sys_safecopyto(endpt, grant,
+			 0, (vir_bytes)&timeout, sizeof timeout);
+    break;
+  case B004SETTIMEOUT:
+    ret = sys_safecopyfrom(endpt, grant,
+			   0, (vir_bytes)&timeout, sizeof timeout);
+    b004_io_timeout = (timeout * system_hz) / 10;
     break;
   default:
     ret = EINVAL;
@@ -325,7 +335,7 @@ void b004_probe(void) {
 	   board_type == B004 ? "B004" : "B008");
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);
-    /*    if (board_type == B008) */
+        if (board_type == B008)
       sys_outb(B008_INT, b008_intmask);
     board_busy = 0;
   }
