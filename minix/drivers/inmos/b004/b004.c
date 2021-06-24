@@ -98,8 +98,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 
   rlink_busy = 1;
 
-  printf("read %d timeout %d\n", size, b004_io_timeout);
-
   getuptime(&now, NULL, NULL);
   deadline = now + b004_io_timeout;
 
@@ -146,8 +144,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     return ret;
 
   wlink_busy = 1;
-
-  printf("write %d timeout %d\n", size, b004_io_timeout);
 
   getuptime(&now, NULL, NULL);
   deadline = now + b004_io_timeout;
@@ -209,7 +205,6 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = sys_safecopyfrom(endpt, grant,
 			   0, (vir_bytes)&timeout, sizeof timeout);
     b004_io_timeout = (timeout * system_hz) / 10;
-    printf("set timeout to %d\n", b004_io_timeout);
     break;
   default:
     ret = EINVAL;
