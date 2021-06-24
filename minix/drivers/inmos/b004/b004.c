@@ -209,7 +209,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = sys_safecopyfrom(endpt, grant,
 			   0, (vir_bytes)&timeout, sizeof timeout);
     b004_io_timeout = (timeout * system_hz) / 10;
-    printf("set timeout to %d\n", size, b004_io_timeout);
+    printf("set timeout to %d\n", b004_io_timeout);
     break;
   default:
     ret = EINVAL;
