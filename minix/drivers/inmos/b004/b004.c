@@ -68,12 +68,6 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
   if (board_busy)
     return EAGAIN;
 
-  if (board_type == 0)
-    b004_probe();
-
-  if (board_type == 0)
-    return EINVAL;
-
   board_busy = 1;
 
   return OK;
@@ -283,6 +277,9 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   if (type == SEF_INIT_LU)
     lu_state_restore();
 
+  if (board_type == 0)
+    b004_probe();
+
   if (type == SEF_INIT_FRESH)
     chardriver_announce();
 
@@ -313,7 +310,6 @@ void b004_probe(void) {
 	sys_outb(B004_OSR, B004_INT_DIS);
 	if (probe_int_seen) {
 	  printf("got the B004 interrupt\n");
-	  board_type = B004;
 	} else {
 	  sys_outb(B008_INT, B008_OUTINT_ENA);
 	  sys_outb(B004_OSR, B004_INT_ENA);
