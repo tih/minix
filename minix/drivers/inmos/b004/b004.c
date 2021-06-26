@@ -198,7 +198,10 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   case B004SETTIMEOUT:
     ret = sys_safecopyfrom(endpt, grant,
 			   0, (vir_bytes)&timeout, sizeof timeout);
-    b004_io_timeout = (timeout * system_hz) / 10;
+    if (timeout == 0)
+      b004_io_timeout = 99999;	/* XXX */
+    else
+      b004_io_timeout = (timeout * system_hz) / 10;
     break;
   default:
     ret = EINVAL;
