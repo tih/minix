@@ -103,9 +103,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 	rlinkbuf[i] = b;
 	break;
       } else {
-	getuptime(&now, NULL, NULL);
-	if (now > deadline) {
-	  goto out;
+	if (b004_io_timeout > 0) {
+	  getuptime(&now, NULL, NULL);
+	  if (now > deadline) {
+	    goto out;
+	  }
 	}
       }
     }
@@ -114,13 +116,13 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
  out:
   rlink_busy = 0;
 
-  if (i > 0)
-    ret = sys_safecopyto(endpt, grant,
-			 0, (vir_bytes)rlinkbuf, i);
-  if (ret == OK)
-    return i;
-  else
-    return ret;
+  if (i > 0) {
+    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes)rlinkbuf, i);
+    if (ret != OK)
+      return ret;
+  }
+
+  return i;
 }
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
@@ -133,8 +135,9 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)		return EINVAL;
   if (size > DMA_SIZE)		return EINVAL;
 
-  if ((ret = sys_safecopyfrom(endpt, grant,
-			      0, (vir_bytes)wlinkbuf, size)) != OK)
+  ret = sys_safecopyfrom(endpt, grant, 0, (vir_bytes)wlinkbuf, size);
+
+  if (ret != OK)
     return ret;
 
   wlink_busy = 1;
@@ -149,9 +152,11 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 	sys_outb(B004_ODR, wlinkbuf[i]);
 	break;
       } else {
-	getuptime(&now, NULL, NULL);
-	if (now > deadline) {
-	  goto out;
+	if (b004_io_timeout > 0) {
+	  getuptime(&now, NULL, NULL);
+	  if (now > deadline) {
+	    goto out;
+	  }
 	}
       }
     }
@@ -198,10 +203,25 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   case B004SETTIMEOUT:
     ret = sys_safecopyfrom(endpt, grant,
 			   0, (vir_bytes)&timeout, sizeof timeout);
-    if (timeout == 0)
-      b004_io_timeout = 99999;	/* XXX */
-    else
+    if ((ret == OK) && (timeout >= 0))
       b004_io_timeout = (timeout * system_hz) / 10;
+    else
+      ret = EINVAL;
+    break;
+  case B004ERROR:
+    sys_inb(B004_ERROR, &b);
+    ret = b & B004_HAS_ERROR;
+    break;
+  case B004READABLE:
+    sys_inb(B004_ISR, &b);
+    ret = b & B004_READY;
+    break;
+  case B004WRITEABLE:
+    sys_inb(B004_OSR, &b);
+    ret = b & B004_READY;
+    break;
+  case B004TIMEOUT:
+    ret = (b004_io_timeout * 10) / system_hz;
     break;
   default:
     ret = EINVAL;

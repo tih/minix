@@ -20,5 +20,9 @@ struct b004_flags {
 #define B004GETFLAGS	_IOR ('T', 3, struct b004_flags)
 #define B004GETTIMEOUT	_IOR ('T', 4, int)
 #define B004SETTIMEOUT	_IOW ('T', 5, int)
+#define B004ERROR	_IO  ('T', 6)
+#define B004READABLE	_IO  ('T', 7)
+#define B004WRITEABLE	_IO  ('T', 8)
+#define B004TIMEOUT	_IO  ('T', 9)
 
 #endif /* _S_I_B004_H */
