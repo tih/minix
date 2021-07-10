@@ -46,21 +46,23 @@ static struct chardriver b004_tab = {
 };
 
 static int board_type = 0;
-static int probe_active;
+static int board_busy = 1;
+static int probe_active = 0;
 static volatile int probe_int_seen;
 
-static unsigned char *rlinkbuf, *wlinkbuf;
-static phys_bytes rlinkbuf_phys, wlinkbuf_phys;
-static int rlink_busy, wlink_busy;
+static unsigned char *linkbuf;
+static int link_busy = 0;
+
+static unsigned char *dmabuf;
+static phys_bytes dmabuf_phys;
+static int dmabuf_len = 0;
 
 static u32_t system_hz;
-static int b004_io_timeout;
+static int io_timeout = 0;
 
 static unsigned int b008_intmask = B008_INT_MASK;
 
 static int irq_hook_id;
-
-static int board_busy = 0;
 
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 		     endpoint_t UNUSED(user_endpt)) {
@@ -83,27 +85,27 @@ static int b004_close(devminor_t UNUSED(minor)) {
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			 int flags, cdev_id_t UNUSED(id)) {
-  int ret, i, b;
+  int ret, i, j, b, copied;
   clock_t now, deadline;
 
-  if (rlink_busy)		return EIO;
+  if (link_busy)		return EIO;
   if (size <= 0)		return EINVAL;
-  if (size > DMA_SIZE)		return EINVAL;
 
-  rlink_busy = 1;
+  link_busy = 1;
 
   getuptime(&now, NULL, NULL);
-  deadline = now + b004_io_timeout;
+  deadline = now + io_timeout;
 
-  for (i = 0; i < size; i++) {
+  copied = 0;
+  for (i = 0, j = 0; i < size; i++) {
     while (1) {
       sys_inb(B004_ISR, &b);
       if (b & B004_READY) {
 	sys_inb(B004_IDR, &b);
-	rlinkbuf[i] = b;
+	linkbuf[j++] = b;
 	break;
       } else {
-	if (b004_io_timeout > 0) {
+	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
 	  if (now > deadline) {
 	    goto out;
@@ -111,48 +113,64 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 	}
       }
     }
+    if (j == LINKBUF_SIZE) {
+      ret = sys_safecopyto(endpt, grant, copied,
+			   (vir_bytes)linkbuf, LINKBUF_SIZE);
+      j = 0;
+      if (ret == OK)
+	copied += LINKBUF_SIZE;
+      else
+	goto out;
+    }
   }
 
  out:
-  rlink_busy = 0;
-
-  if (i > 0) {
-    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes)rlinkbuf, i);
-    if (ret != OK)
-      return ret;
+  if (j > 0) {
+    ret = sys_safecopyto(endpt, grant, copied, (vir_bytes)linkbuf, j);
+    if (ret == OK)
+      copied += j;
   }
 
-  return i;
+  link_busy = 0;
+
+  if (ret != OK)
+    return ret;
+
+  return copied;
 }
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			  int flags, cdev_id_t UNUSED(id)) {
-  int ret, i, b;
+  int ret, i, b, copied, chunk;
   clock_t now, deadline;
 
-  if (wlink_busy)		return EIO;
+  if (link_busy)		return EIO;
   if (size <= 0)		return EINVAL;
-  if (size > DMA_SIZE)		return EINVAL;
 
-  ret = sys_safecopyfrom(endpt, grant, 0, (vir_bytes)wlinkbuf, size);
-
-  if (ret != OK)
-    return ret;
-
-  wlink_busy = 1;
+  link_busy = 1;
 
   getuptime(&now, NULL, NULL);
-  deadline = now + b004_io_timeout;
+  deadline = now + io_timeout;
 
-  for (i = 0; i < size; i++) {
+  copied = 0;
+  for (i = 0, j = 0; i < size; i++) {
+    if (j == 0) {
+      chunk = MIN((size - copied), LINKBUF_SIZE);
+      ret = sys_safecopyfrom(endpt, grant, copied,
+			     (vir_bytes)linkbuf, chunk);
+      if (ret == OK)
+	copied += chunk;
+      else
+	goto out;
+    }
     while (1) {
       sys_inb(B004_OSR, &b);
       if (b & B004_READY) {
-	sys_outb(B004_ODR, wlinkbuf[i]);
+	sys_outb(B004_ODR, linkbuf[j++]);
 	break;
       } else {
-	if (b004_io_timeout > 0) {
+	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
 	  if (now > deadline) {
 	    goto out;
@@ -160,10 +178,15 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 	}
       }
     }
+    if (j == LINKBUF_SIZE)
+      j == 0;
   }
 
  out:
-  wlink_busy = 0;
+  link_busy = 0;
+
+  if (ret != OK)
+    return ret;
 
   return i;
 }
@@ -196,7 +219,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag, sizeof flag);
     break;
   case B004GETTIMEOUT:
-    timeout = (b004_io_timeout * 10) / system_hz;
+    timeout = (io_timeout * 10) / system_hz;
     ret = sys_safecopyto(endpt, grant,
 			 0, (vir_bytes)&timeout, sizeof timeout);
     break;
@@ -204,7 +227,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = sys_safecopyfrom(endpt, grant,
 			   0, (vir_bytes)&timeout, sizeof timeout);
     if ((ret == OK) && (timeout >= 0))
-      b004_io_timeout = (timeout * system_hz) / 10;
+      io_timeout = (timeout * system_hz) / 10;
     else
       ret = EINVAL;
     break;
@@ -221,7 +244,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = b & B004_READY;
     break;
   case B004TIMEOUT:
-    ret = (b004_io_timeout * 10) / system_hz;
+    ret = (io_timeout * 10) / system_hz;
     break;
   default:
     ret = EINVAL;
@@ -243,7 +266,9 @@ static void b004_intr(unsigned int mask) {
 
 static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 
+  ds_publish_u32("board_type", board_type, DSF_OVERWRITE);
   ds_publish_u32("board_busy", board_busy, DSF_OVERWRITE);
+  ds_publish_u32("io_timeout", io_timeout, DSF_OVERWRITE);
 
   return OK;
 }
@@ -251,9 +276,12 @@ static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 static int lu_state_restore() {
   u32_t value;
 
-  ds_retrieve_u32("board_busy", &value);
-  ds_delete_u32("board_busy");
-  board_busy = (int) value;
+  if (ds_retrieve_u32("board_type", &value) == OK)
+    board_type = (int) value;
+  if (ds_retrieve_u32("board_busy", &value) == OK)
+    board_busy = (int) value;
+  if (ds_retrieve_u32("io_timeout", &value) == OK)
+    io_timeout = (int) value;
 
   return OK;
 }
@@ -270,38 +298,46 @@ static void sef_local_startup() {
 }
 
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
-  int off;
-
-  if (!(rlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
-				&rlinkbuf_phys)))
-    panic("sef_cb_init: couldn't allocate DMA buffer");
-
-  if (rlinkbuf_phys/DMA_ALIGN != (rlinkbuf_phys+DMA_SIZE-1)/DMA_ALIGN) {
-    off = rlinkbuf_phys % DMA_ALIGN;
-    rlinkbuf += (DMA_ALIGN - off);
-    rlinkbuf_phys += (DMA_ALIGN - off);
-  }
-
-  if (!(wlinkbuf = alloc_contig(2*DMA_SIZE, AC_LOWER16M|AC_ALIGN4K,
-				&wlinkbuf_phys)))
-    panic("sef_cb_init: couldn't allocate DMA buffer");
-
-  if (wlinkbuf_phys/DMA_ALIGN != (wlinkbuf_phys+DMA_SIZE-1)/DMA_ALIGN) {
-    off = wlinkbuf_phys % DMA_ALIGN;
-    wlinkbuf += (DMA_ALIGN - off);
-    wlinkbuf_phys += (DMA_ALIGN - off);
-  }
-
-  if (sys_getinfo(GET_HZ, &system_hz, sizeof(system_hz), 0, 0) != OK)
-    panic("sef_cb_init: couldn't get system HZ value");
-  
-  b004_io_timeout = system_hz;
+  int off, i;
 
   if (type == SEF_INIT_LU)
     lu_state_restore();
 
+  if (sys_getinfo(GET_HZ, &system_hz, sizeof(system_hz), 0, 0) != OK)
+    panic("sef_cb_init: couldn't get system HZ value");
+  
+  if (io_timeout == 0)
+    io_timeout = system_hz;
+
+  if (!(linkbuf = malloc(LINKBUF_SIZE)))
+    panic("sef_cb_init: couldn't allocate link buffer");
+
   if (board_type == 0)
     b004_probe();
+
+  if (board_type == B008) {
+    for (i = 64; i >= 1; i /= 2) {
+      if ((dmabuf = alloc_contig(i * 1024, AC_LOWER16M | AC_ALIGN64,
+				 &dmabuf_phys)))
+	break;
+      if ((dmabuf = alloc_contig(2 * i * 1024, AC_LOWER16M | AC_ALIGN4,
+				 &dmabuf_phys)))
+	break;
+    }
+
+    if (i == 0)
+      panic("sef_cb_init: couldn't allocate DMA buffer");
+
+    if (dmabuf_phys/DMA_ALIGN != (dmabuf_phys+dmabuf_len-1)/DMA_ALIGN) {
+      off = dmabuf_phys % DMA_ALIGN;
+      dmabuf += (DMA_ALIGN - off);
+      dmabuf_phys += (DMA_ALIGN - off);
+    }
+
+    dmabuf_len = i * 1024;
+
+    printf("b004: allocated a %d byte DMA buffer\n", dmabuf_len);
+  }
 
   if (type == SEF_INIT_FRESH)
     chardriver_announce();
@@ -350,7 +386,7 @@ void b004_probe(void) {
   }
 
   if (board_type) {
-    printf("b004: found a %s device.\n",
+    printf("b004: probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);

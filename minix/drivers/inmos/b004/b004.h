@@ -26,7 +26,8 @@
 #define B008_INT_MASK	0xf
 #define B008_INT_DIS	0x0
 
-#define DMA_SIZE	4096		/* Max bytes per DMA transfer */
+#define LINKBUF_SIZE	(64*1024)
+
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
 #define B004_IO_DELAY	10000		/* 10 milliseconds (usleep) */
