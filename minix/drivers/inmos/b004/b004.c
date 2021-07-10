@@ -1,4 +1,3 @@
-#include <minix/syslib.h>
 #include <minix/drivers.h>
 #include <minix/chardriver.h>
 #include <sys/ioc_b004.h>
@@ -180,7 +179,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
       }
     }
     if (j == LINKBUF_SIZE)
-      j == 0;
+      j = 0;
   }
 
  out:
@@ -318,10 +317,10 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 
   if (board_type == B008) {
     for (i = 64; i >= 1; i /= 2) {
-      if ((dmabuf = alloc_contig(i * 1024, AC_LOWER16M | AC_ALIGN64,
+      if ((dmabuf = alloc_contig(i * 1024, AC_LOWER16M | AC_ALIGN64K,
 				 &dmabuf_phys)))
 	break;
-      if ((dmabuf = alloc_contig(2 * i * 1024, AC_LOWER16M | AC_ALIGN4,
+      if ((dmabuf = alloc_contig(2 * i * 1024, AC_LOWER16M | AC_ALIGN4K,
 				 &dmabuf_phys)))
 	break;
     }
