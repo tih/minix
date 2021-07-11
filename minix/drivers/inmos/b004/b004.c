@@ -56,6 +56,7 @@ static int link_busy = 0;
 static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
 static int dmabuf_len = 0;
+static int dma_available = 0;
 
 static u32_t system_hz;
 static int io_timeout = 0;
@@ -157,8 +158,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   for (i = 0, j = 0; i < size; i++) {
     if (j == 0) {
       chunk = MIN((size - copied), LINKBUF_SIZE);
-      ret = sys_safecopyfrom(endpt, grant, copied,
-			     (vir_bytes)linkbuf, chunk);
+      ret = sys_safecopyfrom(endpt, grant, copied, (vir_bytes)linkbuf, chunk);
       if (ret == OK)
 	copied += chunk;
       else
@@ -246,6 +246,10 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   case B004TIMEOUT:
     ret = (io_timeout * 10) / system_hz;
     break;
+  case B004NODMA:
+    dma_available = 0;
+    ret = OK;
+    break;
   default:
     ret = EINVAL;
   }
@@ -276,12 +280,20 @@ static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 static int lu_state_restore() {
   u32_t value;
 
-  if (ds_retrieve_u32("board_type", &value) == OK)
+  if (ds_retrieve_u32("board_type", &value) == OK) {
     board_type = (int) value;
-  if (ds_retrieve_u32("board_busy", &value) == OK)
+    ds_delete_u32("board_type");
+  }
+
+  if (ds_retrieve_u32("board_busy", &value) == OK) {
     board_busy = (int) value;
-  if (ds_retrieve_u32("io_timeout", &value) == OK)
+    ds_delete_u32("board_busy");
+  }
+
+  if (ds_retrieve_u32("io_timeout", &value) == OK) {
     io_timeout = (int) value;
+    ds_delete_u32("io_timeout");
+  }
 
   return OK;
 }
@@ -335,6 +347,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     }
 
     dmabuf_len = i * 1024;
+    dma_available = 1;
 
     printf("b004: allocated a %d byte DMA buffer\n", dmabuf_len);
   }
