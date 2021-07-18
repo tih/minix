@@ -14,6 +14,9 @@
 #define B008_DMA	(B004_BASE + 0x12)	/* B008 DMA request register */
 #define B008_INT	(B004_BASE + 0x13)	/* B008 interrupt ctl. reg. */
 
+#define B008_DMAWRITE	0x0		/* DMA transfer to B008 board */
+#define B008_DMAREAD	0x1		/* DMA transfer from B008 board */
+
 #define B004_READY	0x1
 #define B004_HAS_ERROR	0x1
 #define B004_INT_ENA	0x2
@@ -32,5 +35,19 @@
 
 #define B004_IO_DELAY	10000		/* 10 milliseconds (usleep) */
 #define B004_RST_DELAY	100000		/* 100 milliseconds (usleep) */
+
+#define DMA_ADDR	0x002		/* DMA chan 1 port; low 16 addr bits */
+#define DMA_TOP		0x083		/* DMA chan 1 port; high 8 addr bits */
+#define DMA_COUNT	0x003		/* DMA chan 1 port; byte count - 1 */
+
+#define DMA_FLIPFLOP	0x00C		/* DMA byte pointer flip-flop */
+#define DMA_MODE	0x00B		/* DMA mode port */
+#define DMA_INIT	0x00A		/* DMA init port */
+
+#define DMA_MASK	0x05		/* set mask for DMA channel 1 */
+#define DMA_UNMASK	0x01		/* unset mask for DMA channel 1 */
+
+#define DMA_READ	0x05		/* DMA read; chan 1 demand mode */
+#define DMA_WRITE	0x09		/* DMA write; chan 1 demand mode */
 
 #endif /* __B004_H */

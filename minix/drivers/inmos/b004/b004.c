@@ -31,6 +31,10 @@ static void b004_initialize(void);
 static void b004_reset(void);
 static void b004_analyse(void);
 
+static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size);
+static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size);
+static int dma_start(phys_bytes dmabuf_phys, int count, int do_write);
+
 static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
 static int sef_cb_lu_state_save(int, int);
@@ -57,6 +61,7 @@ static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
 static int dmabuf_len = 0;
 static int dma_available = 0;
+static int dma_active = 0;
 
 static u32_t system_hz;
 static int io_timeout = 0;
@@ -78,14 +83,16 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 
 static int b004_close(devminor_t UNUSED(minor)) {
 
+  io_timeout = system_hz;
+
   board_busy = 0;
 
   return OK;
 }
 
-static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
+static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
-			 int flags, cdev_id_t UNUSED(id)) {
+			 int UNUSED(flags), cdev_id_t UNUSED(id)) {
   int ret, i, j, b, copied;
   clock_t now, deadline;
 
@@ -93,6 +100,12 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
   if (size <= 0)		return EINVAL;
 
   link_busy = 1;
+
+  if (dma_available) {
+    ret = dma_read(endpt, grant, size);
+    link_busy = 0;
+    return ret;
+  }
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -142,7 +155,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t position,
 
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
-			  int flags, cdev_id_t UNUSED(id)) {
+			  int UNUSED(flags), cdev_id_t UNUSED(id)) {
   int ret, i, j, b, copied, chunk;
   clock_t now, deadline;
 
@@ -150,6 +163,12 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)		return EINVAL;
 
   link_busy = 1;
+
+  if (dma_available) {
+    ret = dma_write(endpt, grant, size);
+    link_busy = 0;
+    return ret;
+  }
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -189,6 +208,97 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     return ret;
 
   return i;
+}
+
+static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
+  int ret, i, chunk, copied;
+  clock_t now, deadline;
+
+  getuptime(&now, NULL, NULL);
+  deadline = now + io_timeout;
+
+  copied = 0;
+  while (copied < size) {
+    chunk = MIN((size - copied), dmabuf_len);
+    if ((ret = dma_start(dmabuf_phys + i; chunk, 0)) != OK)
+      return copied;
+    while(dma_active) {
+      if (io_timeout > 0) {
+	getuptime(&now, NULL, NULL);
+	if (now > deadline)
+	  return copied;
+	usleep(B004_DELAY);
+      }
+    }
+    ret = sys_safecopyto(endpt, grant, copied, (vir_bytes)dmabuf, chunk);
+    if (ret == OK)
+      copied += chunk;
+    else
+      goto copied;
+  }
+
+  return 0;
+}
+
+static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
+  int ret, i, chunk, copied;
+  clock_t now, deadline;
+
+  getuptime(&now, NULL, NULL);
+  deadline = now + io_timeout;
+
+  copied = 0;
+  while (copied < size) {
+    chunk = MIN((size - copied), dmabuf_len);
+    ret = sys_safecopyfrom(endpt, grant, copied, (vir_bytes)dmabuf, chunk);
+    if (ret != OK)
+      return copied;
+    if ((ret = dma_start(dmabuf_phys + i; chunk, 1)) != OK)
+      return copied;
+    while(dma_active) {
+      if (io_timeout > 0) {
+	getuptime(&now, NULL, NULL);
+	if (now > deadline)
+	  return copied;
+	usleep(B004_DELAY);
+      }
+    }
+    copied += chunk;
+  }
+
+  return 0;
+}
+
+static int dma_start(phys_bytes dmabuf_phys, int count, int do_write) {
+  pvb_pair_t byte_out[9];
+  int ret;
+
+  pv_set(byte_out[0], DMA_INIT, DMA_MASK);
+  pv_set(byte_out[1], DMA_FLIPFLOP, 0);
+  pv_set(byte_out[2], DMA_MODE, do_write ? DMA_WRITE : DMA_READ);
+  pv_set(byte_out[3], DMA_ADDR, (unsigned) (dmabuf_phys >>  0) & 0xff);
+  pv_set(byte_out[4], DMA_ADDR, (unsigned) (dmabuf_phys >>  8) & 0xff);
+  pv_set(byte_out[5], DMA_TOP,  (unsigned) (dmabuf_phys >> 16) & 0xff);
+  pv_set(byte_out[6], DMA_COUNT, (((count - 1) >> 0)) & 0xff);
+  pv_set(byte_out[7], DMA_COUNT, (count - 1) >> 8);
+  pv_set(byte_out[8], DMA_INIT, DMA_UNMASK);
+
+  if ((ret=sys_voutb(byte_out, 9)) != OK)
+    panic("dma_setup: failed to program DMA chip (%d)", ret);
+
+  pv_set(byte_out[0], B008_INT, B008_INT_DIS);
+  pv_set(byte_out[1], B004_ISR, B004_INT_ENA);
+  pv_set(byte_out[2], B004_OSR, B004_INT_ENA);
+  pv_set(byte_out[3], B008_INT, B008_DMAINT_ENA);
+
+  if ((ret=sys_voutb(byte_out, 4)) != OK)
+    panic("dma_setup: failed to enable interrupts (%d)", ret);
+
+  dma_active = 1;
+
+  sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
+
+  return(OK);
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
@@ -265,13 +375,15 @@ static void b004_intr(unsigned int mask) {
   if (probe_active)
     probe_int_seen = 1;
 
+  if (dma_active)
+    dma_active = 0;
+
   return;
 }
 
 static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 
   ds_publish_u32("board_type", board_type, DSF_OVERWRITE);
-  ds_publish_u32("board_busy", board_busy, DSF_OVERWRITE);
   ds_publish_u32("io_timeout", io_timeout, DSF_OVERWRITE);
 
   return OK;
@@ -283,11 +395,6 @@ static int lu_state_restore() {
   if (ds_retrieve_u32("board_type", &value) == OK) {
     board_type = (int) value;
     ds_delete_u32("board_type");
-  }
-
-  if (ds_retrieve_u32("board_busy", &value) == OK) {
-    board_busy = (int) value;
-    ds_delete_u32("board_busy");
   }
 
   if (ds_retrieve_u32("io_timeout", &value) == OK) {
@@ -352,8 +459,11 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     printf("b004: allocated a %d byte DMA buffer\n", dmabuf_len);
   }
 
-  if (type == SEF_INIT_FRESH)
+  if (type != SEF_INIT_LU)
     chardriver_announce();
+
+  if (board_type != 0)
+    board_busy = 0;
 
   return OK;
 }
