@@ -286,15 +286,14 @@ static int dma_start(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 9)) != OK)
     panic("dma_setup: failed to program DMA chip (%d)", ret);
 
-  pv_set(byte_out[0], B008_INT, B008_INT_DIS);
+  pv_set(byte_out[0], B008_INT, B008_ERRINT_ENA);
   pv_set(byte_out[1], B004_ISR, B004_INT_ENA);
   pv_set(byte_out[2], B004_OSR, B004_INT_ENA);
-  pv_set(byte_out[3], B008_INT, B008_DMAINT_ENA);
+  pv_set(byte_out[3], B008_INT, B008_ERRINT_ENA | B008_DMAINT_ENA);
 
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
 
-  sys_irqenable(&irq_hook_id);
   dma_active = 1;
 
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
@@ -371,7 +370,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static void b004_intr(unsigned int mask) {
   unsigned int b;
 
-  printf("b004_intr(%d)\n", mask);
+  printf("b004_intr(%d) - p: %d, d: %d\n", mask, probe_active, dma_active);
 
   if (probe_active)
     probe_int_seen = 1;
@@ -478,31 +477,35 @@ void b004_probe(void) {
     if (sys_inb(B004_OSR, &b) == OK) {
       if (b & B004_READY) {
 	board_type = B004;
-	probe_active = 1;
-	probe_int_seen = 0;
 	sys_outb(B008_INT, B008_INT_DIS);
-	sys_outb(B004_OSR, B004_INT_DIS);
+	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ISR, B004_INT_ENA);
+	sys_outb(B008_INT, B008_MASK);
 	irq_hook_id = B004_IRQ;
 	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
+	usleep(B004_RST_DELAY);
+	probe_active = 1;
+	probe_int_seen = 0;
+	sys_outb(B008_INT, B008_ERRINT_ENA);
+	sys_outb(B004_OSR, B004_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ODR, 0);
 	usleep(B004_RST_DELAY);
 	sys_outb(B004_OSR, B004_INT_DIS);
 	if (probe_int_seen) {
 	  printf("got the B004 interrupt\n");
-	} else {
-	  sys_outb(B008_INT, B008_OUTINT_ENA);
-	  sys_outb(B004_OSR, B004_INT_ENA);
-	  sys_outb(B004_ODR, 0);
-	  usleep(B004_RST_DELAY);
-	  sys_outb(B004_OSR, B004_INT_DIS);
-	  if (probe_int_seen) {
-	    printf("got the B008 interrupt\n");
-	    board_type = B008;
-	  }
+	  board_type = B004;
+	}
+	sys_outb(B008_INT, B008_MASK);
+	sys_outb(B004_OSR, B004_INT_ENA);
+	sys_outb(B004_ODR, 0);
+	usleep(B004_RST_DELAY);
+	sys_outb(B004_OSR, B004_INT_DIS);
+	if (probe_int_seen) {
+	  printf("got the B008 interrupt\n");
+	  board_type = B008;
 	}
 	probe_active = 0;
       }
@@ -512,10 +515,10 @@ void b004_probe(void) {
   if (board_type) {
     printf("b004: probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
-    sys_outb(B004_OSR, B004_INT_ENA);
-    sys_outb(B004_ISR, B004_INT_ENA);
+    sys_outb(B004_OSR, B004_INT_DIS);
+    sys_outb(B004_ISR, B004_INT_DIS);
     if (board_type == B008)
-      sys_outb(B008_INT, B008_INT_MASK);
+      sys_outb(B008_INT, B008_ERRINT_ENA);
     board_busy = 0;
   }
 }
