@@ -480,7 +480,7 @@ void b004_probe(void) {
 	sys_outb(B008_INT, B008_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ISR, B004_INT_ENA);
-	sys_outb(B008_INT, B008_MASK);
+	sys_outb(B008_INT, B008_INT_MASK);
 	irq_hook_id = B004_IRQ;
 	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
@@ -498,7 +498,7 @@ void b004_probe(void) {
 	  printf("got the B004 interrupt\n");
 	  board_type = B004;
 	}
-	sys_outb(B008_INT, B008_MASK);
+	sys_outb(B008_INT, B008_INT_MASK);
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ODR, 0);
 	usleep(B004_RST_DELAY);
