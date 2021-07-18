@@ -220,21 +220,21 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   copied = 0;
   while (copied < size) {
     chunk = MIN((size - copied), dmabuf_len);
-    if ((ret = dma_start(dmabuf_phys + i; chunk, 0)) != OK)
+    if ((ret = dma_start(dmabuf_phys + i, chunk, 0)) != OK)
       return copied;
     while(dma_active) {
       if (io_timeout > 0) {
 	getuptime(&now, NULL, NULL);
 	if (now > deadline)
 	  return copied;
-	usleep(B004_DELAY);
+	usleep(B004_DMA_DELAY);
       }
     }
     ret = sys_safecopyto(endpt, grant, copied, (vir_bytes)dmabuf, chunk);
     if (ret == OK)
       copied += chunk;
     else
-      goto copied;
+      return copied;
   }
 
   return 0;
@@ -253,14 +253,14 @@ static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
     ret = sys_safecopyfrom(endpt, grant, copied, (vir_bytes)dmabuf, chunk);
     if (ret != OK)
       return copied;
-    if ((ret = dma_start(dmabuf_phys + i; chunk, 1)) != OK)
+    if ((ret = dma_start(dmabuf_phys + i, chunk, 1)) != OK)
       return copied;
     while(dma_active) {
       if (io_timeout > 0) {
 	getuptime(&now, NULL, NULL);
 	if (now > deadline)
 	  return copied;
-	usleep(B004_DELAY);
+	usleep(B004_DMA_DELAY);
       }
     }
     copied += chunk;
@@ -513,8 +513,8 @@ void b004_probe(void) {
 	   board_type == B004 ? "B004" : "B008");
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);
-        if (board_type == B008)
-      sys_outb(B008_INT, b008_intmask);
+    if (board_type == B008)
+      sys_outb(B008_INT, B008_INT_MASK);
     board_busy = 0;
   }
 }

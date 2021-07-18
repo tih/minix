@@ -33,6 +33,7 @@
 
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
+#define B004_DMA_DELAY	1000		/* 1 millisecond (usleep) */
 #define B004_IO_DELAY	10000		/* 10 milliseconds (usleep) */
 #define B004_RST_DELAY	100000		/* 100 milliseconds (usleep) */
 
