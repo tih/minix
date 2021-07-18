@@ -101,7 +101,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   link_busy = 1;
 
-  if (dma_available) {
+  if (dma_available && (size > DMA_LIMIT)) {
     ret = dma_read(endpt, grant, size);
     link_busy = 0;
     return ret;
@@ -164,7 +164,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   link_busy = 1;
 
-  if (dma_available) {
+  if (dma_available && (size > DMA_LIMIT)) {
     ret = dma_write(endpt, grant, size);
     link_busy = 0;
     return ret;
