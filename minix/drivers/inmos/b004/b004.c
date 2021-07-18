@@ -61,7 +61,7 @@ static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
 static int dmabuf_len = 0;
 static int dma_available = 0;
-static int dma_active = 0;
+static volatile int dma_active = 0;
 
 static u32_t system_hz;
 static int io_timeout = 0;
@@ -294,6 +294,7 @@ static int dma_start(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
 
+  sys_irqenable(&irq_hook_id);
   dma_active = 1;
 
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
