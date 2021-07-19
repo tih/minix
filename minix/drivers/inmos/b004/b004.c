@@ -33,7 +33,9 @@ static void b004_analyse(void);
 
 static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size);
 static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size);
-static int dma_start(phys_bytes dmabuf_phys, int count, int do_write);
+static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write);
+
+static int expect_intr(void);
 
 static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
@@ -51,17 +53,13 @@ static struct chardriver b004_tab = {
 
 static int board_type = 0;
 static int board_busy = 1;
-static int probe_active = 0;
-static volatile int probe_int_seen;
 
 static unsigned char *linkbuf;
-static int link_busy = 0;
 
 static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
 static int dmabuf_len = 0;
 static int dma_available = 0;
-static volatile int dma_active = 0;
 
 static u32_t system_hz;
 static int io_timeout = 0;
@@ -96,16 +94,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   int ret, i, j, b, copied;
   clock_t now, deadline;
 
-  if (link_busy)		return EIO;
   if (size <= 0)		return EINVAL;
 
-  link_busy = 1;
 
-  if (dma_available && (size > DMA_LIMIT)) {
-    ret = dma_read(endpt, grant, size);
-    link_busy = 0;
-    return ret;
-  }
+  if (dma_available && (size > DMA_MINIMUM))
+    return dma_read(endpt, grant, size);
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -122,6 +115,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
 	  if (now > deadline) {
+	    ret = EINTR;
 	    goto out;
 	  }
 	}
@@ -145,8 +139,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       copied += j;
   }
 
-  link_busy = 0;
-
   if (ret != OK)
     return ret;
 
@@ -159,16 +151,10 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   int ret, i, j, b, copied, chunk;
   clock_t now, deadline;
 
-  if (link_busy)		return EIO;
   if (size <= 0)		return EINVAL;
 
-  link_busy = 1;
-
-  if (dma_available && (size > DMA_LIMIT)) {
-    ret = dma_write(endpt, grant, size);
-    link_busy = 0;
-    return ret;
-  }
+  if (dma_available && (size > DMA_MINIMUM))
+    return dma_write(endpt, grant, size);
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -192,6 +178,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
 	  if (now > deadline) {
+	    ret = EINTR;
 	    goto out;
 	  }
 	}
@@ -202,8 +189,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
 
  out:
-  link_busy = 0;
-
   if (ret != OK)
     return ret;
 
@@ -214,62 +199,53 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
   clock_t now, deadline;
 
-  getuptime(&now, NULL, NULL);
-  deadline = now + io_timeout;
+  sys_setalarm(io_timeout, 0);
 
   copied = 0;
   while (copied < size) {
     chunk = MIN((size - copied), dmabuf_len);
-    if ((ret = dma_start(dmabuf_phys + i, chunk, 0)) != OK)
-      return copied;
-    while(dma_active) {
-      if (io_timeout > 0) {
-	getuptime(&now, NULL, NULL);
-	if (now > deadline)
-	  return copied;
-	usleep(B004_DMA_DELAY);
-      }
-    }
+    ret = dma_transfer(dmabuf_phys, chunk, 0);
+    if (ret != OK)
+      break;
     ret = sys_safecopyto(endpt, grant, copied, (vir_bytes)dmabuf, chunk);
     if (ret == OK)
       copied += chunk;
     else
-      return copied;
+      break;
   }
 
-  return 0;
+  sys_setalarm(0, 0);
+
+  if (ret != OK)
+    return ret;
+
+  return copied;
 }
 
 static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
-  clock_t now, deadline;
 
-  getuptime(&now, NULL, NULL);
-  deadline = now + io_timeout;
+  sys_setalarm(io_timeout, 0);
 
   copied = 0;
   while (copied < size) {
     chunk = MIN((size - copied), dmabuf_len);
     ret = sys_safecopyfrom(endpt, grant, copied, (vir_bytes)dmabuf, chunk);
     if (ret != OK)
-      return copied;
-    if ((ret = dma_start(dmabuf_phys + i, chunk, 1)) != OK)
-      return copied;
-    while(dma_active) {
-      if (io_timeout > 0) {
-	getuptime(&now, NULL, NULL);
-	if (now > deadline)
-	  return copied;
-	usleep(B004_DMA_DELAY);
-      }
-    }
-    copied += chunk;
+      break;
+    ret = dma_transfer(dmabuf_phys, chunk, 1);
+    if (ret == OK)
+      copied += chunk;
+    else
+      break;
   }
 
-  return 0;
+  sys_setalarm(0, 0);
+  
+  return copied;
 }
 
-static int dma_start(phys_bytes dmabuf_phys, int count, int do_write) {
+static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
   pvb_pair_t byte_out[9];
   int ret;
 
@@ -294,11 +270,31 @@ static int dma_start(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
 
-  dma_active = 1;
-
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
 
-  return(OK);
+  ret = expect_intr();
+
+  return ret;
+}
+
+static int expect_intr(void) {
+  message mess;
+  int caller, ret;
+
+  ret = receive(HARDWARE|CLOCK, &mess, NULL);
+  if (ret != OK)
+    return ret;
+
+  if (mess.m_type == SYN_ALARM)
+    ret = EINTR;
+
+  mess.m_type = TASK_REPLY;
+  caller = mess.REP_PROC_NR;
+  mess.REP_PROC_NR = mess.PROC_NR;
+  mess.REP_STATUS = OK;
+  send(caller, &mess);
+
+  return ret;
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
@@ -370,13 +366,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static void b004_intr(unsigned int mask) {
   unsigned int b;
 
-  printf("b004_intr(%d) - p: %d, d: %d\n", mask, probe_active, dma_active);
-
-  if (probe_active)
-    probe_int_seen = 1;
-
-  if (dma_active)
-    dma_active = 0;
+  printf("b004_intr\n");
 
   return;
 }
@@ -469,14 +459,14 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 }
 
 void b004_probe(void) {
-  unsigned int b;
+  unsigned int b, ret, caller;
+  message mess;
 
   b004_reset();
 
   if (sys_outb(B004_OSR, 0) == OK) {
     if (sys_inb(B004_OSR, &b) == OK) {
       if (b & B004_READY) {
-	board_type = B004;
 	sys_outb(B008_INT, B008_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ISR, B004_INT_ENA);
@@ -485,28 +475,29 @@ void b004_probe(void) {
 	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
-	usleep(B004_RST_DELAY);
-	probe_active = 1;
-	probe_int_seen = 0;
+	sys_setalarm(system_hz, 0);
 	sys_outb(B008_INT, B008_ERRINT_ENA);
 	sys_outb(B004_OSR, B004_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ODR, 0);
-	usleep(B004_RST_DELAY);
+	ret = expect_intr();
 	sys_outb(B004_OSR, B004_INT_DIS);
-	if (probe_int_seen) {
+	if (ret == OK) {
 	  printf("got the B004 interrupt\n");
 	  board_type = B004;
+	} else {
+	  sys_setalarm(system_hz, 0);
+	  sys_outb(B008_INT, B008_ERRINT_ENA | B008_OUTINT_ENA);
+	  sys_outb(B004_OSR, B004_INT_ENA);
+	  sys_outb(B004_ODR, 0);
+	  ret = expect_intr();
+	  sys_outb(B004_OSR, B004_INT_DIS);
+	  if (ret == OK) {
+	    printf("got the B008 interrupt\n");
+	    board_type = B008;
+	  }
 	}
-	sys_outb(B008_INT, B008_INT_MASK);
-	sys_outb(B004_OSR, B004_INT_ENA);
-	sys_outb(B004_ODR, 0);
-	usleep(B004_RST_DELAY);
-	sys_outb(B004_OSR, B004_INT_DIS);
-	if (probe_int_seen) {
-	  printf("got the B008 interrupt\n");
-	  board_type = B008;
-	}
+	sys_setalarm(0, 0);
 	probe_active = 0;
       }
     }

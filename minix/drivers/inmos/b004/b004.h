@@ -33,7 +33,7 @@
 
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
-#define DMA_LIMIT	32		/* Don't do DMA for smaller xfers */
+#define DMA_MINIMUM	32		/* Don't do DMA for smaller xfers */
 
 #define B004_DMA_DELAY	1000		/* 1 millisecond (usleep) */
 #define B004_IO_DELAY	10000		/* 10 milliseconds (usleep) */
