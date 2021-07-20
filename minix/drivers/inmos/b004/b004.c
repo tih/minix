@@ -281,7 +281,7 @@ static int expect_intr(void) {
   message mess;
   int caller, ret;
 
-  ret = receive(HARDWARE, &mess, NULL);
+  ret = driver_receive(HARDWARE, &mess, NULL);
   if (ret != OK)
     return EINTR;
 
