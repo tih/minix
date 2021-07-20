@@ -281,6 +281,7 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 9)) != OK)
     panic("dma_setup: failed to program DMA chip (%d)", ret);
 
+#if 0
   pv_set(byte_out[0], B008_INT, B008_ERRINT_ENA);
   pv_set(byte_out[1], B004_ISR, B004_INT_ENA);
   pv_set(byte_out[2], B004_OSR, B004_INT_ENA);
@@ -288,17 +289,20 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
+#endif
 
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
 
   ret = expect_intr();
 
+#if 0
   pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
   pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
   pv_set(byte_out[2], B008_INT, B008_ERRINT_ENA);
 
   if (sys_voutb(byte_out, 3) != OK)
     panic("dma_setup: failed to reset interrupts");
+#endif
 
   return ret;
 }
@@ -494,21 +498,16 @@ void b004_probe(void) {
   if (sys_outb(B004_OSR, 0) == OK) {
     if (sys_inb(B004_OSR, &b) == OK) {
       if (b & B004_READY) {
-	sys_outb(B008_INT, B008_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ISR, B004_INT_ENA);
-	sys_outb(B008_INT, B008_INT_MASK);
+	sys_outb(B008_INT, B008_OUTINT_ENA | B008_INPINT_ENA);
 	irq_hook_id = B004_IRQ;
 	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
 	sys_setalarm(system_hz, 0);
-	sys_outb(B008_INT, B008_ERRINT_ENA);
-	sys_outb(B004_OSR, B004_INT_DIS);
-	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ODR, 0);
 	ret = expect_intr();
-	sys_outb(B004_OSR, B004_INT_DIS);
 	if (ret == OK) {
 	  printf("B004 protocol works\n");
 	  board_type = B004;
@@ -531,10 +530,10 @@ void b004_probe(void) {
   if (board_type) {
     printf("b004: probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
-    sys_outb(B004_OSR, B004_INT_DIS);
-    sys_outb(B004_ISR, B004_INT_DIS);
+    sys_outb(B004_OSR, B004_INT_ENA);
+    sys_outb(B004_ISR, B004_INT_ENA);
     if (board_type == B008)
-      sys_outb(B008_INT, B008_ERRINT_ENA);
+      sys_outb(B008_INT, B008_DMAINT_ENA);
     board_busy = 0;
   }
 }
