@@ -289,6 +289,8 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
+#else
+  sys_outb(B008_INT, B008_DMAINT_ENA);
 #endif
 
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
@@ -302,6 +304,8 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
   if (sys_voutb(byte_out, 3) != OK)
     panic("dma_setup: failed to reset interrupts");
+#else
+  sys_outb(B008_INT, B008_ERRINT_ENA);
 #endif
 
   return ret;
@@ -533,7 +537,7 @@ void b004_probe(void) {
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);
     if (board_type == B008)
-      sys_outb(B008_INT, B008_DMAINT_ENA);
+      sys_outb(B008_INT, B008_ERRINT_ENA);
     board_busy = 0;
   }
 }
