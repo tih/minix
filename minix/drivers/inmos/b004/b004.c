@@ -100,15 +100,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)		return EINVAL;
 
 
-  if (dma_available)
+  if ((dma_available) && (size > DMA_THRESHOLD))
     return dma_read(endpt, grant, size);
-
-  /* printf("read %d\n", size); */
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
-
-  /* sys_outb(B004_ISR, B004_INT_ENA); */
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -144,10 +140,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       copied += j;
   }
 
-  /* sys_outb(B004_ISR, B004_INT_DIS); */
-
-  /* printf("     %d\n", ret == OK ? copied : ret); */
-
   if (ret != OK)
     return ret;
 
@@ -162,15 +154,11 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   if (size <= 0)		return EINVAL;
 
-  if (dma_available)
+  if ((dma_available) && (size > DMA_THRESHOLD))
     return dma_write(endpt, grant, size);
-
-  /* printf("write %d\n", size); */
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
-
-  /* sys_outb(B004_OSR, B004_INT_ENA); */
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -200,10 +188,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
 
  out:
-  /* printf("      %d\n", ret == OK ? i : ret); */
-
-  /* sys_outb(B004_OSR, B004_INT_DIS); */
-
   if (ret != OK)
     return ret;
 
@@ -213,8 +197,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
   struct itimerval itimer;
-
-  /* printf("dma read %d\n", size); */
 
   sys_setalarm(io_timeout, 0);
 
@@ -233,8 +215,6 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 
   sys_setalarm(0, 0);
 
-  /* printf("         %d\n", ret == OK ? copied : ret); */
-
   if ((ret != OK) && (ret != EINTR))
     return ret;
 
@@ -243,8 +223,6 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 
 static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
-
-  /* printf("dma write %d\n", size); */
 
   sys_setalarm(io_timeout, 0);
 
@@ -263,8 +241,6 @@ static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 
   sys_setalarm(0, 0);
   
-  /* printf("          %d\n", ret == OK ? copied : ret); */
-
   if ((ret != OK) && (ret != EINTR))
     return ret;
 
@@ -536,7 +512,7 @@ void b004_probe(void) {
       }
     }
   }
-/* board_type = B004; */
+
   if (board_type) {
     printf("b004: probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
