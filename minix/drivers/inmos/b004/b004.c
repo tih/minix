@@ -105,7 +105,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
 
-  sys_outb(B004_ISR, B004_INT_ENA);
+  /* sys_outb(B004_ISR, B004_INT_ENA); */
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -167,7 +167,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
 
-  sys_outb(B004_OSR, B004_INT_ENA);
+  /* sys_outb(B004_OSR, B004_INT_ENA); */
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -285,21 +285,24 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 9)) != OK)
     panic("dma_setup: failed to program DMA chip (%d)", ret);
 
-  pv_set(byte_out[0], B008_INT, B008_OUTINT_ENA|B008_INPINT_ENA);
-  pv_set(byte_out[1], B004_ISR, B004_INT_ENA);
-  pv_set(byte_out[2], B004_OSR, B004_INT_ENA);
-  pv_set(byte_out[3], B008_INT, B008_DMAINT_ENA);
+  pv_set(byte_out[0], B004_ISR, B004_INT_ENA);
+  pv_set(byte_out[1], B004_OSR, B004_INT_ENA);
+  pv_set(byte_out[2], B008_INT, B008_DMAINT_ENA);
 
-  if ((ret=sys_voutb(byte_out, 4)) != OK)
+  if ((ret=sys_voutb(byte_out, 3)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
+
+  sys_irqenable(&irq_hook_id);
 
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
 
   ret = expect_intr();
 
+  sys_irqdisable(&irq_hook_id);
+
   pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
   pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
-  pv_set(byte_out[2], B008_INT, B008_OUTINT_ENA|B008_INPINT_ENA);
+  pv_set(byte_out[2], B008_INT, B008_INT_DIS);
 
   if (sys_voutb(byte_out, 3) != OK)
     panic("dma_setup: failed to reset interrupts");
