@@ -100,6 +100,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (dma_available && (size > DMA_MINIMUM))
     return dma_read(endpt, grant, size);
 
+  printf("read %d\n", size);
+
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
 
@@ -139,6 +141,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       copied += j;
   }
 
+  printf("     %d\n", ret == OK ? copied : ret);
+
   if (ret != OK)
     return ret;
 
@@ -155,6 +159,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   if (dma_available && (size > DMA_MINIMUM))
     return dma_write(endpt, grant, size);
+
+  printf("write %d\n", size);
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -189,6 +195,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
 
  out:
+  printf("      %d\n", ret == OK ? i : ret);
+
   if (ret != OK)
     return ret;
 
@@ -197,10 +205,11 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
 static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
-  clock_t now, deadline;
+  struct itimerval itimer;
 
-  /* sys_setalarm(io_timeout, 0); */
-  alarm(1);
+  printf("dma read %d\n", size);
+
+  sys_setalarm(io_timeout, 0);
 
   copied = 0;
   while (copied < size) {
@@ -215,8 +224,9 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
       break;
   }
 
-  /* sys_setalarm(0, 0); */
-  alarm(0);
+  sys_setalarm(0, 0);
+
+  printf("         %d\n", ret == OK ? copied : ret);
 
   if (ret != OK)
     return ret;
@@ -227,8 +237,9 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
 
-  /* sys_setalarm(io_timeout, 0); */
-  alarm(1);
+  printf("dma write %d\n", size);
+
+  sys_setalarm(io_timeout, 0);
 
   copied = 0;
   while (copied < size) {
@@ -243,9 +254,13 @@ static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
       break;
   }
 
-  /* sys_setalarm(0, 0); */
-  alarm(0);
+  sys_setalarm(0, 0);
   
+  printf("          %d\n", ret == OK ? copied : ret);
+
+  if (ret != OK)
+    return ret;
+
   return copied;
 }
 
@@ -470,8 +485,7 @@ void b004_probe(void) {
 	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
-	/* sys_setalarm(system_hz, 0); */
-	alarm(1);
+	sys_setalarm(system_hz, 0);
 	sys_outb(B008_INT, B008_ERRINT_ENA);
 	sys_outb(B004_OSR, B004_INT_DIS);
 	sys_outb(B004_OSR, B004_INT_ENA);
@@ -482,8 +496,7 @@ void b004_probe(void) {
 	  printf("got the B004 interrupt\n");
 	  board_type = B004;
 	} else {
-	  /* sys_setalarm(system_hz, 0); */
-	  alarm(1);
+	  sys_setalarm(system_hz, 0);
 	  sys_outb(B008_INT, B008_ERRINT_ENA | B008_OUTINT_ENA);
 	  sys_outb(B004_OSR, B004_INT_ENA);
 	  sys_outb(B004_ODR, 0);
@@ -494,8 +507,7 @@ void b004_probe(void) {
 	    board_type = B008;
 	  }
 	}
-	/* sys_setalarm(0, 0); */
-	alarm(0);
+	sys_setalarm(0, 0);
       }
     }
   }
