@@ -512,8 +512,8 @@ void b004_probe(void) {
 	if (ret == OK) {
 	  printf("B004 protocol works\n");
 	  board_type = B004;
-	  if (dmabuf = alloc_contig(4, AC_LOWER16M | AC_ALIGN4K,
-				    &dmabuf_phys)) {
+	  if ((dmabuf = alloc_contig(4, AC_LOWER16M | AC_ALIGN4K,
+				     &dmabuf_phys))) {
 	    sys_setalarm(system_hz, 0);
 	    dmabuf[0] = 0;
 	    ret = dma_transfer(dmabuf_phys, 1, 1);
