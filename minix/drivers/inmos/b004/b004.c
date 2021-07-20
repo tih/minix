@@ -97,7 +97,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)		return EINVAL;
 
 
-  if (dma_available && (size > DMA_MINIMUM))
+  if (dma_available)
     return dma_read(endpt, grant, size);
 
   printf("read %d\n", size);
@@ -157,7 +157,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   if (size <= 0)		return EINVAL;
 
-  if (dma_available && (size > DMA_MINIMUM))
+  if (dma_available)
     return dma_write(endpt, grant, size);
 
   printf("write %d\n", size);
@@ -307,9 +307,20 @@ static int expect_intr(void) {
   message mess;
   int caller, ret;
 
-  ret = driver_receive(HARDWARE, &mess, NULL);
+  ret = driver_receive(ANY, &mess, NULL);
   if (ret != OK)
     return EINTR;
+
+  switch (mess.m_source) {
+  case HARDWARE:
+    return OK;
+    ;;
+  case CLOCK:
+    return EINTR;
+    ;;
+  default:
+    printf("OOPS! message from %d\n", mess.m_source);
+  }
 
   return OK;
 }
@@ -477,7 +488,6 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 
 void b004_probe(void) {
   unsigned int b, ret, caller;
-  message mess;
 
   b004_reset();
 
@@ -500,18 +510,17 @@ void b004_probe(void) {
 	ret = expect_intr();
 	sys_outb(B004_OSR, B004_INT_DIS);
 	if (ret == OK) {
-	  printf("got the B004 interrupt\n");
+	  printf("B004 protocol works\n");
 	  board_type = B004;
-	} else {
-	  sys_setalarm(system_hz, 0);
-	  sys_outb(B008_INT, B008_ERRINT_ENA | B008_OUTINT_ENA);
-	  sys_outb(B004_OSR, B004_INT_ENA);
-	  sys_outb(B004_ODR, 0);
-	  ret = expect_intr();
-	  sys_outb(B004_OSR, B004_INT_DIS);
-	  if (ret == OK) {
-	    printf("got the B008 interrupt\n");
-	    board_type = B008;
+	  if (dmabuf = alloc_contig(4, AC_LOWER16M | AC_ALIGN4K,
+				    &dmabuf_phys)) {
+	    sys_setalarm(system_hz, 0);
+	    dmabuf[0] = 0;
+	    ret = dma_transfer(dmabuf_phys, 1, 1);
+	    if (ret == OK) {
+	      printf("DMA works\n");
+	      board_type = B008;
+	    }
 	  }
 	}
 	sys_setalarm(0, 0);
