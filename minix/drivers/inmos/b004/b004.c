@@ -293,6 +293,13 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
   ret = expect_intr();
 
+  pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
+  pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
+  pv_set(byte_out[2], B008_INT, B008_ERRINT_ENA);
+
+  if (sys_voutb(byte_out, 3) != OK)
+    panic("dma_setup: failed to reset interrupts");
+
   return ret;
 }
 
