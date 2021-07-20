@@ -121,10 +121,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       } else {
 	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
-	  if (now > deadline) {
-	    ret = EINTR;
+	  if (now > deadline)
 	    goto out;
-	  }
 	}
       }
     }
@@ -192,10 +190,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
       } else {
 	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
-	  if (now > deadline) {
-	    ret = EINTR;
+	  if (now > deadline)
 	    goto out;
-	  }
 	}
       }
     }
@@ -239,7 +235,7 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 
   /* printf("         %d\n", ret == OK ? copied : ret); */
 
-  if (ret != OK)
+  if ((ret != OK) && (ret != EINTR))
     return ret;
 
   return copied;
@@ -269,7 +265,7 @@ static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   
   /* printf("          %d\n", ret == OK ? copied : ret); */
 
-  if (ret != OK)
+  if ((ret != OK) && (ret != EINTR))
     return ret;
 
   return copied;
@@ -512,8 +508,7 @@ void b004_probe(void) {
     if (sys_inb(B004_OSR, &b) == OK) {
       if (b & B004_READY) {
 	sys_outb(B004_OSR, B004_INT_ENA);
-	sys_outb(B004_ISR, B004_INT_ENA);
-	sys_outb(B008_INT, B008_OUTINT_ENA|B008_INPINT_ENA);
+	sys_outb(B008_INT, B008_OUTINT_ENA);
 	irq_hook_id = B004_IRQ;
 	if ((sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
@@ -530,6 +525,7 @@ void b004_probe(void) {
 	    sys_setalarm(system_hz, 0);
 	    dmabuf[0] = 0;
 	    ret = dma_transfer(dmabuf_phys, 1, 1);
+	    free_contig(dmabuf, 4);
 	    if (ret == OK) {
 	      printf("DMA works\n");
 	      board_type = B008;
