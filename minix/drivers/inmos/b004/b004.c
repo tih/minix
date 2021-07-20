@@ -100,7 +100,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (dma_available)
     return dma_read(endpt, grant, size);
 
-  printf("read %d\n", size);
+  /* printf("read %d\n", size); */
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -143,7 +143,9 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       copied += j;
   }
 
-  printf("     %d\n", ret == OK ? copied : ret);
+  /* sys_outb(B004_ISR, B004_INT_DIS); */
+
+  /* printf("     %d\n", ret == OK ? copied : ret); */
 
   if (ret != OK)
     return ret;
@@ -162,7 +164,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (dma_available)
     return dma_write(endpt, grant, size);
 
-  printf("write %d\n", size);
+  /* printf("write %d\n", size); */
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -199,7 +201,9 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
 
  out:
-  printf("      %d\n", ret == OK ? i : ret);
+  /* printf("      %d\n", ret == OK ? i : ret); */
+
+  /* sys_outb(B004_OSR, B004_INT_DIS); */
 
   if (ret != OK)
     return ret;
@@ -211,7 +215,7 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
   struct itimerval itimer;
 
-  printf("dma read %d\n", size);
+  /* printf("dma read %d\n", size); */
 
   sys_setalarm(io_timeout, 0);
 
@@ -230,7 +234,7 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 
   sys_setalarm(0, 0);
 
-  printf("         %d\n", ret == OK ? copied : ret);
+  /* printf("         %d\n", ret == OK ? copied : ret); */
 
   if (ret != OK)
     return ret;
@@ -241,7 +245,7 @@ static ssize_t dma_read(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
   int ret, i, chunk, copied;
 
-  printf("dma write %d\n", size);
+  /* printf("dma write %d\n", size); */
 
   sys_setalarm(io_timeout, 0);
 
@@ -260,7 +264,7 @@ static ssize_t dma_write(endpoint_t endpt, cp_grant_id_t grant, size_t size) {
 
   sys_setalarm(0, 0);
   
-  printf("          %d\n", ret == OK ? copied : ret);
+  /* printf("          %d\n", ret == OK ? copied : ret); */
 
   if (ret != OK)
     return ret;
@@ -314,21 +318,23 @@ static int expect_intr(void) {
   message mess;
   int caller, ret;
 
-  ret = driver_receive(ANY, &mess, NULL);
-  if (ret != OK)
-    return EINTR;
+  while (1) {
+    ret = driver_receive(ANY, &mess, NULL);
+    if (ret != OK)
+      return EINTR;
 
-  switch (mess.m_source) {
-  case HARDWARE:
-    return OK;
-    ;;
-  case CLOCK:
-    return EINTR;
-    ;;
-  default:
-    printf("OOPS! message from %d\n", mess.m_source);
+    switch (mess.m_source) {
+    case HARDWARE:
+      return OK;
+      ;;
+    case CLOCK:
+      return EINTR;
+      ;;
+    default:
+      printf("OOPS! message from %d\n", mess.m_source);
+    }
   }
-
+  /* NOTREACHED */
   return OK;
 }
 
@@ -530,7 +536,7 @@ void b004_probe(void) {
       }
     }
   }
-board_type = B004;
+/* board_type = B004; */
   if (board_type) {
     printf("b004: probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
