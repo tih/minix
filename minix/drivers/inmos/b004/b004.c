@@ -60,6 +60,7 @@ static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
 static int dmabuf_len = 0;
 static int dma_available = 0;
+static int dma_disabled = 0;
 
 static u32_t system_hz;
 static int io_timeout = 0;
@@ -82,6 +83,8 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 static int b004_close(devminor_t UNUSED(minor)) {
 
   io_timeout = system_hz;
+  if (dma_disabled)
+    dma_available = 1;
 
   board_busy = 0;
 
@@ -331,7 +334,7 @@ static int expect_intr(void) {
       return EINTR;
       ;;
     default:
-      printf("OOPS! message from %d\n", mess.m_source);
+      printf("b004: unexpected message from %d\n", mess.m_source);
     }
   }
   /* NOTREACHED */
@@ -394,6 +397,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = (io_timeout * 10) / system_hz;
     break;
   case B004NODMA:
+    dma_disabled |= dma_available;
     dma_available = 0;
     ret = OK;
     break;
