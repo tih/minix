@@ -281,7 +281,6 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 9)) != OK)
     panic("dma_setup: failed to program DMA chip (%d)", ret);
 
-#if 0
   pv_set(byte_out[0], B008_INT, B008_ERRINT_ENA);
   pv_set(byte_out[1], B004_ISR, B004_INT_ENA);
   pv_set(byte_out[2], B004_OSR, B004_INT_ENA);
@@ -289,24 +288,17 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
-#else
-  sys_outb(B008_INT, B008_DMAINT_ENA);
-#endif
 
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
 
   ret = expect_intr();
 
-#if 0
   pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
   pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
   pv_set(byte_out[2], B008_INT, B008_ERRINT_ENA);
 
   if (sys_voutb(byte_out, 3) != OK)
     panic("dma_setup: failed to reset interrupts");
-#else
-  sys_outb(B008_INT, B008_ERRINT_ENA);
-#endif
 
   return ret;
 }
