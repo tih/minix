@@ -105,6 +105,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
 
+  sys_outb(B004_ISR, B004_INT_ENA);
+
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
     while (1) {
@@ -164,6 +166,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
+
+  sys_outb(B004_OSR, B004_INT_ENA);
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -281,10 +285,10 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
   if ((ret=sys_voutb(byte_out, 9)) != OK)
     panic("dma_setup: failed to program DMA chip (%d)", ret);
 
-  pv_set(byte_out[0], B008_INT, B008_ERRINT_ENA);
+  pv_set(byte_out[0], B008_INT, B008_OUTINT_ENA|B008_INPINT_ENA);
   pv_set(byte_out[1], B004_ISR, B004_INT_ENA);
   pv_set(byte_out[2], B004_OSR, B004_INT_ENA);
-  pv_set(byte_out[3], B008_INT, B008_ERRINT_ENA | B008_DMAINT_ENA);
+  pv_set(byte_out[3], B008_INT, B008_DMAINT_ENA);
 
   if ((ret=sys_voutb(byte_out, 4)) != OK)
     panic("dma_setup: failed to enable interrupts (%d)", ret);
@@ -295,7 +299,7 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
   pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
   pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
-  pv_set(byte_out[2], B008_INT, B008_ERRINT_ENA);
+  pv_set(byte_out[2], B008_INT, B008_OUTINT_ENA|B008_INPINT_ENA);
 
   if (sys_voutb(byte_out, 3) != OK)
     panic("dma_setup: failed to reset interrupts");
@@ -496,11 +500,12 @@ void b004_probe(void) {
       if (b & B004_READY) {
 	sys_outb(B004_OSR, B004_INT_ENA);
 	sys_outb(B004_ISR, B004_INT_ENA);
-	sys_outb(B008_INT, B008_OUTINT_ENA | B008_INPINT_ENA);
+	sys_outb(B008_INT, B008_OUTINT_ENA|B008_INPINT_ENA);
 	irq_hook_id = B004_IRQ;
-	if ((sys_irqsetpolicy(B004_IRQ, IRQ_REENABLE, &irq_hook_id) != OK) ||
+	if ((sys_irqsetpolicy(B004_IRQ, 0, &irq_hook_id) != OK) ||
 	    (sys_irqenable(&irq_hook_id) != OK))
 	  panic("sef_cb_init: couldn't enable interrupts");
+	sys_irqdisable(&irq_hook_id);
 	sys_setalarm(system_hz, 0);
 	sys_outb(B004_ODR, 0);
 	ret = expect_intr();
@@ -522,14 +527,14 @@ void b004_probe(void) {
       }
     }
   }
-
+board_type = B004;
   if (board_type) {
     printf("b004: probe found a %s device.\n",
 	   board_type == B004 ? "B004" : "B008");
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);
     if (board_type == B008)
-      sys_outb(B008_INT, B008_ERRINT_ENA);
+      sys_outb(B008_INT, B008_DMAINT_ENA);
     board_busy = 0;
   }
 }
