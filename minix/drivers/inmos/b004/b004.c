@@ -281,20 +281,11 @@ static int expect_intr(void) {
   message mess;
   int caller, ret;
 
-  ret = receive(HARDWARE|CLOCK, &mess, NULL);
+  ret = receive(HARDWARE, &mess, NULL);
   if (ret != OK)
-    return ret;
+    return EINTR;
 
-  if (mess.m_type == SYN_ALARM)
-    ret = EINTR;
-
-  mess.m_type = TASK_REPLY;
-  caller = mess.REP_PROC_NR;
-  mess.REP_PROC_NR = mess.PROC_NR;
-  mess.REP_STATUS = OK;
-  send(caller, &mess);
-
-  return ret;
+  return OK;
 }
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
@@ -498,7 +489,6 @@ void b004_probe(void) {
 	  }
 	}
 	sys_setalarm(0, 0);
-	probe_active = 0;
       }
     }
   }
