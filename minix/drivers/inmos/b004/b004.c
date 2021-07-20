@@ -494,7 +494,6 @@ void b004_probe(void) {
 	sys_outb(B004_ODR, 0);
 	ret = expect_intr();
 	if (ret == OK) {
-	  printf("B004 protocol works\n");
 	  board_type = B004;
 	  if ((dmabuf = alloc_contig(4, AC_LOWER16M | AC_ALIGN4K,
 				     &dmabuf_phys))) {
@@ -502,10 +501,8 @@ void b004_probe(void) {
 	    dmabuf[0] = 0;
 	    ret = dma_transfer(dmabuf_phys, 1, 1);
 	    free_contig(dmabuf, 4);
-	    if (ret == OK) {
-	      printf("DMA works\n");
+	    if (ret == OK)
 	      board_type = B008;
-	    }
 	  }
 	}
 	sys_setalarm(0, 0);
