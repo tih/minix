@@ -305,12 +305,9 @@ static int expect_intr(void) {
     case CLOCK:
       return EINTR;
     case VFS_PROC_NR:
-      if (msg.m_type == CDEV_CLOSE) {
+      if (msg.m_type == CDEV_CLOSE)
 	chardriver_process(&b004_tab, &msg, status);
 	return EINTR;
-      } else {
-	chardriver_reply(&msg, status, EINTR);
-      }
     default:
       printf("b004: unexpected %d message from %d\n",
 	     msg.m_type, msg.m_source);
