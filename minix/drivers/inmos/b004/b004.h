@@ -14,13 +14,12 @@
 #define B008_DMA	(B004_BASE + 0x12)	/* B008 DMA request register */
 #define B008_INT	(B004_BASE + 0x13)	/* B008 interrupt ctl. reg. */
 
-#define B008_DMAWRITE	0x0		/* DMA transfer to B008 board */
-#define B008_DMAREAD	0x1		/* DMA transfer from B008 board */
-
 #define B004_READY	0x1
 #define B004_HAS_ERROR	0x1
 #define B004_INT_ENA	0x2
 #define B004_INT_DIS	0x0
+
+#define B004_RST_DELAY	100000		/* 100 milliseconds (usleep) */
 
 #define B008_DMAINT_ENA	0x1
 #define B008_ERRINT_ENA	0x2
@@ -29,15 +28,14 @@
 #define B008_INT_MASK	0xf
 #define B008_INT_DIS	0x0
 
+#define B008_DMAWRITE	0x0		/* DMA transfer to B008 board */
+#define B008_DMAREAD	0x1		/* DMA transfer from B008 board */
+
 #define LINKBUF_SIZE	(64*1024)
 
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
 #define DMA_THRESHOLD	16		/* Polled I/O for smaller xfers */
-
-#define B004_DMA_DELAY	1000		/* 1 millisecond (usleep) */
-#define B004_IO_DELAY	10000		/* 10 milliseconds (usleep) */
-#define B004_RST_DELAY	100000		/* 100 milliseconds (usleep) */
 
 #define DMA_ADDR	0x002		/* DMA chan 1 port; low 16 addr bits */
 #define DMA_TOP		0x083		/* DMA chan 1 port; high 8 addr bits */

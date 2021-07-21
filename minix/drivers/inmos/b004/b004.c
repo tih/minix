@@ -296,7 +296,10 @@ static int expect_intr(void) {
   while (1) {
     ret = driver_receive(ANY, &mess, &status);
     if (ret != OK)
-      return EINTR;
+      if (ret == EINTR)
+	return ret;
+      else
+	printf("b004: expect_intr: unexpected %d from driver_receive()", ret);
 
     switch (mess.m_source) {
     case HARDWARE:
@@ -389,7 +392,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static void b004_intr(unsigned int mask) {
   unsigned int b;
 
-  printf("b004_intr\n");
+  printf("b004: unexpected hardware interrupt\n");
 
   return;
 }
