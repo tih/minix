@@ -291,10 +291,10 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 
 static int expect_intr(void) {
   message mess;
-  int caller, ret;
+  int status, ret;
 
   while (1) {
-    ret = driver_receive(ANY, &mess, NULL);
+    ret = driver_receive(ANY, &mess, &status);
     if (ret != OK)
       return EINTR;
 
@@ -306,7 +306,13 @@ static int expect_intr(void) {
       return EINTR;
       ;;
     default:
-      printf("b004: unexpected message from %d\n", mess.m_source);
+      if ((mess.m_source == VFS_PROC_NR) && (mess.m_type == CDEV_CLOSE)) {
+	chardriver_process(&b004_tab, &mess, status);
+	return EINTR;
+      } else {
+	printf("b004: unexpected %d message from %d\n",
+	       mess.m_type, mess.m_source);
+      }
     }
   }
   /* NOTREACHED */
@@ -476,7 +482,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 }
 
 void b004_probe(void) {
-  unsigned int b, ret, caller;
+  unsigned int b, ret;
 
   b004_reset();
 
