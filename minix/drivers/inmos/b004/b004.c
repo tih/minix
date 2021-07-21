@@ -295,11 +295,11 @@ static int expect_intr(void) {
 
   while (1) {
     ret = driver_receive(ANY, &mess, &status);
-    if (ret != OK)
+    if (ret != OK) {
       if (ret == EINTR)
 	return ret;
-      else
-	printf("b004: expect_intr: unexpected %d from driver_receive()", ret);
+      printf("b004: expect_intr: unexpected %d from driver_receive()", ret);
+    }
 
     switch (mess.m_source) {
     case HARDWARE:
