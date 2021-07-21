@@ -65,8 +65,6 @@ static int dma_disabled = 0;
 static u32_t system_hz;
 static int io_timeout = 0;
 
-static unsigned int b008_intmask = B008_INT_MASK;
-
 static int irq_hook_id;
 
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
@@ -290,35 +288,33 @@ static int dma_transfer(phys_bytes dmabuf_phys, int count, int do_write) {
 }
 
 static int expect_intr(void) {
-  message mess;
+  message msg;
   int status, ret;
 
   while (1) {
-    ret = driver_receive(ANY, &mess, &status);
+    ret = driver_receive(ANY, &msg, &status);
     if (ret != OK) {
       if (ret == EINTR)
 	return ret;
       printf("b004: expect_intr: unexpected %d from driver_receive()", ret);
     }
 
-    switch (mess.m_source) {
+    switch (msg.m_source) {
     case HARDWARE:
       return OK;
-      ;;
     case CLOCK:
       return EINTR;
-      ;;
-    default:
-      if ((mess.m_source == VFS_PROC_NR) && (mess.m_type == CDEV_CLOSE)) {
-	chardriver_process(&b004_tab, &mess, status);
+    case VFS_PROC_NR:
+      if (msg.m_type == CDEV_CLOSE) {
+	chardriver_process(&b004_tab, &msg, status);
 	return EINTR;
-      } else {
-	printf("b004: unexpected %d message from %d\n",
-	       mess.m_type, mess.m_source);
       }
+    default:
+      printf("b004: unexpected %d message from %d\n",
+	     msg.m_type, msg.m_source);
     }
   }
-  /* NOTREACHED */
+
   return OK;
 }
 
@@ -520,7 +516,7 @@ void b004_probe(void) {
   }
 
   if (board_type) {
-    printf("b004: probe found a %s device.\n",
+    printf("b004: probe found a %s compatible device.\n",
 	   board_type == B004 ? "B004" : "B008");
     sys_outb(B004_OSR, B004_INT_ENA);
     sys_outb(B004_ISR, B004_INT_ENA);
