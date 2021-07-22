@@ -5,7 +5,9 @@ SUBDIR+=	audio
 SUBDIR+=	clock
 SUBDIR+=	eeprom
 SUBDIR+=	examples
+.if ${MACHINE_ARCH} == "i386"
 SUBDIR+=	inmos
+.endif # ${MACHINE_ARCH} == "i386"
 SUBDIR+=	iommu
 SUBDIR+=	net
 SUBDIR+=	power
