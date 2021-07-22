@@ -429,7 +429,7 @@ static void sef_local_startup() {
 }
 
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
-  int off, i;
+  int off, k;
 
   if (type == SEF_INIT_LU)
     lu_state_restore();
@@ -447,16 +447,16 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
     b004_probe();
 
   if (board_type == B008) {
-    for (i = 64; i >= 1; i /= 2) {
-      if ((dmabuf = alloc_contig(i * 1024, AC_LOWER16M | AC_ALIGN64K,
+    for (k = 64; k >= 1; k /= 2) {
+      if ((dmabuf = alloc_contig(k * 1024, AC_LOWER16M | AC_ALIGN64K,
 				 &dmabuf_phys)))
 	break;
-      if ((dmabuf = alloc_contig(2 * i * 1024, AC_LOWER16M | AC_ALIGN4K,
+      if ((dmabuf = alloc_contig(2 * k * 1024, AC_LOWER16M | AC_ALIGN4K,
 				 &dmabuf_phys)))
 	break;
     }
 
-    if (i == 0)
+    if (k == 0)
       panic("sef_cb_init: couldn't allocate DMA buffer");
 
     if (dmabuf_phys/DMA_ALIGN != (dmabuf_phys+dmabuf_len-1)/DMA_ALIGN) {
@@ -465,7 +465,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
       dmabuf_phys += (DMA_ALIGN - off);
     }
 
-    dmabuf_len = i * 1024;
+    dmabuf_len = k * 1024;
     dma_available = 1;
 
     printf("b004: allocated a %d byte DMA buffer\n", dmabuf_len);
