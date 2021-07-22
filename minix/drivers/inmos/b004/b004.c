@@ -113,8 +113,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   size_t i, j, copied;
   clock_t now, deadline;
 
-  if (size <= 0)		return EINVAL;
-  if (dma.endpt != 0)	return EIO;
+  if (size <= 0)
+    return EINVAL;
+
+  if (dma.endpt != 0)
+    return EIO;
 
   if ((dma_available) && (size > DMA_THRESHOLD)) {
     dma.endpt = endpt;
@@ -179,8 +182,11 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   size_t i, j, copied, chunk;
   clock_t now, deadline;
 
-  if (size <= 0)		return EINVAL;
-  if (dma.endpt != 0)	return EIO;
+  if (size <= 0)
+    return EINVAL;
+
+  if (dma.endpt != 0)
+    return EIO;
 
   if ((dma_available) && (size > DMA_THRESHOLD)) {
     dma.endpt = endpt;
