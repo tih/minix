@@ -191,6 +191,7 @@
 ./usr/include/i386/vmparam.h                            minix-comp
 ./usr/include/i386/wchar_limits.h                       minix-comp
 ./usr/include/minix/vassert.h                           minix-comp
+./usr/include/sys/ioc_b004.h                            minix-comp
 ./usr/include/x86                                       minix-comp
 ./usr/include/x86/aout_machdep.h                        minix-comp
 ./usr/include/x86/bootinfo.h                            minix-comp
