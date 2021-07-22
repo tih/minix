@@ -390,10 +390,12 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 static int b004_cancel(devminor_t UNUSED(minor),
 			endpoint_t endpt, cdev_id_t id) {
 
-  if (dma.endpt == endpt && dma.id == id)
+  if (dma.endpt == endpt && dma.id == id) {
     dma.endpt = 0;
+    return EINTR;
+  }
 
-  return OK;
+  return EDONTREPLY;
 }
 
 static void b004_alarm(clock_t UNUSED(stamp)) {
