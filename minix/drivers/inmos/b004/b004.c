@@ -397,6 +397,7 @@ static int b004_cancel(devminor_t UNUSED(minor),
 			endpoint_t endpt, cdev_id_t id) {
 
   if (dma.endpt == endpt && dma.id == id) {
+    sys_setalarm(0, 0);
     dma.endpt = 0;
     return EINTR;
   }
