@@ -33,4 +33,8 @@ SUBDIR=	at backup \
 	autopart part partition playwave  \
 	recwave repartition screendump
 
+.if ${MACHINE_ARCH} == "i386"
+SUBDIR+= ispy iserver
+.endif # ${MACHINE_ARCH} == "i386"
+
 .include <bsd.subdir.mk>

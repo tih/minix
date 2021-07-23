@@ -67,7 +67,7 @@ char *PROGRAM_NAME = "ispy";
 
 #define SEGSIZE   511
 
-/* #define TIMEOUT 10 */
+#define TIMEOUT 10
 #define EMPTY   (-1)
 #define MAXLENGTH 1024          /* maximum route length */
 #define PERLINE 9

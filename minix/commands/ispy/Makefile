@@ -1,4 +1,4 @@
-DEFS= -DMINIX -DDEFAULTLINK=/dev/link0
+DEFS= -DMINIX -DDEFAULTLINK=\"/dev/link0\"
 CPPFLAGS+= ${DEFS}
 
 PROGS= ispy mtest

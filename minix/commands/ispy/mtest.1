@@ -1,0 +1,68 @@
+.TH MTEST 1
+.SH NAME
+mtest \- test memory on Transputers found by ispy
+.SH SYNOPSIS
+\fBispy [\fB\-c\fR] [\fB\-e \fIKiB\fR] [\fB\-l\fR] [\fB\-t \fInum\fR] [\fB\-t2\fR] [\fB\-t4\fR] [\fB\-q\fR] [\fB\-x\fR] [\fB\-0\fR] [\fB\-i\fR] [\fB\-h\fR] 
+.br
+.de FL
+.TP
+\\fB\\$1\\fR
+\\$2
+..
+.de EX
+.TP 20
+\\fB\\$1\\fR
+# \\$2
+..
+.SH OPTIONS
+.TP 5
+.B \-c
+# include T2s with C004s on links
+.TP 5
+.B \-e
+# set ceiling in kilobytes up to which memory is tested
+.TP 5
+.B \-l
+# suppress printing of progress dots to stderr
+.TP 5
+.B \-t
+# test only the specified processor
+.TP 5
+.B \-t2
+# test T2 processors only
+.TP 5
+.B \-t4
+# test T4 and T8 processors only
+.TP 5
+.B \-q
+# quick memory sizing only
+.TP 5
+.B \-x
+# give extra information on why memory search stopped
+.TP 5
+.B \-0
+# do not include root processor in tests
+.TP 5
+.B \-i
+# show progress information
+.TP 5
+.B \-h
+# show usage summary
+.SH DESCRIPTION
+.PP
+mtest is used to test memory on Transputers.
+It needs ispy to suppy it with a map of the network.
+Pipe output from ispy into mtest, and give mtest the flags that tell it
+what to do.
+.SH EXAMPLES
+.TP 20
+.B ispy \| mtest \-t 02
+# Run memory test on processor 02 in the network mapped by ispy.
+.SH BUGS
+.PP
+mtest should be able to test multiple processors in parallel, but this
+does not currently work.
+Because of this, the \-t option must be used to limit the testing to one.
+.SH "SEE ALSO"
+.BR mtest (1),
+.BR iserver (1)

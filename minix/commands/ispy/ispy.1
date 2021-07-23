@@ -1,0 +1,51 @@
+.TH ISPY 1
+.SH NAME
+ispy \- inspect and test a Transputer network
+.SH SYNOPSIS
+\fBispy [\fB\-n\fR] [\fB\-r\fR] [\fB\-c4\fR] [\fB\-cl\fR] [\fB\-cr\fR] [\fB\-cs\fR] [\fB\-l \fIname\fR] [\fB\-x\fR] [\fB\-i\fR] [\fB\-h\fR] 
+.br
+.de FL
+.TP
+\\fB\\$1\\fR
+\\$2
+..
+.de EX
+.TP 20
+\\fB\\$1\\fR
+# \\$2
+..
+.SH OPTIONS
+.TP 5
+.B \-n
+# do not reset the root transputer
+.TP 5
+.B \-r
+# reset the root transputer subsystem
+.TP 5
+.B \-c4
+# read the state of all C004s found
+.TP 5
+.B \-cl
+# read the state of C004s, long form
+.TP 5
+.B \-cs
+# set all C004s in file
+.TP 5
+.B \-l
+# use the specified link (else TRANSPUTER env var, else /dev/link0)
+.TP 5
+.B \-x
+# ignore any file piped in
+.TP 5
+.B \-i
+# give progress report while working
+.TP 5
+.B \-h
+# show usage summary
+.SH DESCRIPTION
+.PP
+ispy is the Inmos tool for inspecting and testing a Transputer network.
+It gives a summary of the configuration, and can be asked to do more.
+.SH "SEE ALSO"
+.BR mtest (1),
+.BR iserver (1)

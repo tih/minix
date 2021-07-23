@@ -1,0 +1,51 @@
+.TH ISERVER 1
+.SH NAME
+iserver \- Inmos host file server for Transputer networks
+.SH SYNOPSIS
+\fBiserver [\fB\-sb \fIfilename\fR] [\fB\-si\fR] [\fB\-se\fR] [\fB\-sl \fIlinkname\fR] [\fB\-sr\fR] [\fB\-sa\fR] [\fB\-sc \fIfilename\fR] [\fB\-sp \fIKiB\fR] [\fB\-ss\fR]
+.br
+.de FL
+.TP
+\\fB\\$1\\fR
+\\$2
+..
+.de EX
+.TP 20
+\\fB\\$1\\fR
+# \\$2
+..
+.SH OPTIONS
+.TP 5
+.B \-sb
+# boot the named file (same as \-sr \-ss \-si \-sc filename)
+.TP 5
+.B \-si
+# verbose mode
+.TP 5
+.B \-se
+# test the error flag
+.TP 5
+.B \-sl
+# use the named link (else TRANSPUTER env var, else /dev/link0)
+.TP 5
+.B \-sr
+# reset the root transputer
+.TP 5
+.B \-sa
+# analyze and peek the root transputer
+.TP 5
+.B \-sc
+# copy the named file to the link
+.TP 5
+.B \-sp
+# set peek size to the specified number of kilobytes
+.TP 5
+.B \-ss
+# serve the link
+.SH DESCRIPTION
+.PP
+iserver is the Inmos host system server for Transputer networks, booting
+them, and giving them access to console and storage resources on the host.
+.SH "SEE ALSO"
+.BR ispy (1),
+.BR mtest (1)
