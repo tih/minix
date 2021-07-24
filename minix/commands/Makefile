@@ -34,7 +34,7 @@ SUBDIR=	at backup \
 	recwave repartition screendump
 
 .if ${MACHINE_ARCH} == "i386"
-SUBDIR+= ispy iserver
+SUBDIR+= inmos
 .endif # ${MACHINE_ARCH} == "i386"
 
 .include <bsd.subdir.mk>

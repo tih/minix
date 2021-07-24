@@ -249,7 +249,7 @@ globalvalue iserv_fail;
 #endif
 
 #ifdef MINIX
-#define HOST         "MINIX 3"
+#define HOST         "MINIX"
 #define HOST_ID      BOX_PC
 #define OS_ID        OS_MINIX
 #endif
