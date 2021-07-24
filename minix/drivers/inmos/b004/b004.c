@@ -59,6 +59,7 @@ static int board_type = 0;
 static int board_busy = 1;
 
 static unsigned char *linkbuf;
+static int linkbuf_busy = 0;
 
 static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
@@ -116,7 +117,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)
     return EINVAL;
 
-  if (dma.endpt != 0)
+  if (linkbuf_busy || (dma.endpt != 0))
     return EIO;
 
   if ((dma_available) && (size > DMA_THRESHOLD)) {
@@ -131,6 +132,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
     dma_read();
     return EDONTREPLY;
   }
+
+  linkbuf_busy = 1;
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -169,6 +172,8 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       copied += j;
   }
 
+  linkbuf_busy = 0;
+
   if (ret != OK)
     return ret;
 
@@ -185,7 +190,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)
     return EINVAL;
 
-  if (dma.endpt != 0)
+  if (linkbuf_busy || (dma.endpt != 0))
     return EIO;
 
   if ((dma_available) && (size > DMA_THRESHOLD)) {
@@ -200,6 +205,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     dma_write();
     return EDONTREPLY;
   }
+
+  linkbuf_busy = 1;
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -232,6 +239,8 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
 
  out:
+  linkbuf_busy = 0;
+
   if (ret != OK)
     return ret;
 
@@ -398,6 +407,8 @@ static int b004_cancel(devminor_t UNUSED(minor),
 
   if (dma.endpt == endpt && dma.id == id) {
     sys_setalarm(0, 0);
+    printf("b004: cancelling %d byte %s operation\n",
+           dma.size, dma.writing ? "write" : "read");
     dma.endpt = 0;
     return EINTR;
   }
@@ -408,6 +419,8 @@ static int b004_cancel(devminor_t UNUSED(minor),
 static void b004_alarm(clock_t UNUSED(stamp)) {
 
   if (dma.endpt != 0) {
+    printf("b004: timing out a %d byte %s operation\n",
+           dma.size, dma.writing ? "write" : "read");
     chardriver_reply_task(dma.endpt, dma.id, dma.done);
     dma.endpt = 0;
   }
