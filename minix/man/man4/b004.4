@@ -1,0 +1,85 @@
+.TH B004 4
+.SH NAME
+b004 \- Inmos B004 compatible Transputer interface boards
+.SH DESCRIPTION
+The
+.B b004
+driver family takes care of all user input and output.  It governs the
+keyboard, the console, the serial lines, and pseudo ttys.  Input on any of
+these devices undergoes "input processing", and output undergoes "output
+processing" according to the standard termios terminal interface.
+.SH DESCRIPTION
+Hardware that interfaces a Transputer, or a network of Transputers, to
+a PC, normally implements the interface standard that
+.B Inmos
+established with their
+.B B004
+evaluation board, and which they kept using with the later boards,
+although they extended the interface along the way.  The
+.B B004
+has a simple, polled, interface using a handful of I/O ports on the
+.B ISA
+bus, and can also generate interrupts to signal when its input and
+output ports are ready to receive or transmit another byte.  The board
+was configurable to four different I/O port blocks, three choices of
+DMA channels, and either
+.B IRQ
+3 or
+.B IRQ
+5.
+.PP
+With the later
+.B B008
+board, DMA capability was added, and a later revision of that board
+added soft configuration, through extra I/O ports, of the
+.B IRQ
+and
+.B DMA
+choices.  This was mostly aimed at customers wanting to build a super
+computer out of an
+.B IBM PC AT,
+seeing as the
+.B T800
+processor was about ten times as powerful as that machine; you could
+fit ten of those on a single
+.B B008
+board, and you could squeeze four such boards into the
+.B AT.  (They only needed separate I/O ports hard jumpered, and could
+have their
+.B IRQ
+and
+.B DMA
+both disabled, being configured as clients of the first board in the
+host system.
+.PP
+The
+.B b004
+driver handles the communication with a
+.B B004
+or
+.B B008
+compatible board, discovers which of the two it's dealing with, and
+handles the I/O operations transparently to the client.  It only
+allows one client at a time to open the link, and insists on only one
+operation at at time being active on the link.
+.PP
+Additionally, the driver supports a number of \fIioctl\fR calls, to
+handle various parameter settings, particularly I/O timeout, and
+status inquiries.  For details of these, read
+\fI/usr/include/sys/ioc_b004.h\fR
+.SH FILES
+The special device used is /dev/link0, as this is the name most
+existing applications tend to assume.
+.SH BUGS
+The driver currently insists that the board must be at I/O address
+0x150, IRQ 5, and DRQ 1.  This is the setup that tends to fit with
+semi-modern PCs with an ISA bus, but the driver could do with an
+update to make this configurable, either using run time switches, or
+by having minor device numbers representing different combinations of
+te available options.
+.SH "SEE ALSO"
+.BR ispy (1),
+.BR mtest (1),
+.BR iserver (1)
+.SH AUTHOR
+Tom Ivar Helbekkmo (tih@hamartun.priv.no

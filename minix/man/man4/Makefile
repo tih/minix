@@ -10,4 +10,8 @@ MLINKS += controller.4 aha1540.4
 MLINKS += controller.4 ncr810.4
 MLINKS += controller.4 dosfile.4
 
+.if ${MACHINE_ARCH} == "i386"
+MAN+= b004.4
+.endif # ${MACHINE_ARCH} == "i386"
+
 .include <bsd.man.mk>

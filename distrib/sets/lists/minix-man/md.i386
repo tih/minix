@@ -8,5 +8,6 @@
 ./usr/man/man1/iserver.1                                minix-man
 ./usr/man/man1/ispy.1                                   minix-man
 ./usr/man/man1/mtest.1                                  minix-man
+./usr/man/man4/b004.4                                   minix-man
 ./usr/man/man8/hgfs.8                                   minix-man
 ./usr/man/man8/vbfs.8                                   minix-man
