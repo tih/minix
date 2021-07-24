@@ -16,38 +16,35 @@ although they extended the interface along the way.  The
 .B B004
 has a simple, polled, interface using a handful of I/O ports on the
 .B ISA
-bus, and can also generate interrupts to signal when its input and
-output ports are ready to receive or transmit another byte.  The board
-was configurable to four different I/O port blocks, three choices of
-DMA channels, and either
+bus, The I/O port group was at address 0x150.
+.PP
+The later
+.B B008
+board was configurable to three different I/O port blocks (0x150,
+0x200, or 0x300), three choices of
+.B DMA
+channels (0, 1, or 3), and either
 .B IRQ
 3 or
 .B IRQ
 5.
-.PP
-With the later
-.B B008
-board, DMA capability was added, and a later revision of that board
-added soft configuration, through extra I/O ports, of the
-.B IRQ
-and
-.B DMA
-choices.  This was mostly aimed at customers wanting to build a super
-computer out of an
-.B IBM PC AT,
-seeing as the
+The B008 board could turn the
+.B IBM PC AT
+into a parallel supercomputer.
+The
 .B T800
-processor was about ten times as powerful as that machine; you could
+processor was about ten times as powerful as that machine, you could
 fit ten of those on a single
 .B B008
 board, and you could squeeze four such boards into the
-.B AT.  (They only needed separate I/O ports hard jumpered, and could
-have their
-.B IRQ
+.B AT,
+giving you 400 times the power of the host system.
+Three of these boards would have their I/O ports,
+.B IRQ,
 and
 .B DMA
-both disabled, being configured as clients of the first board in the
-host system.
+all disabled, being instead internally connected as clients of the
+first board in the host system.
 .PP
 The
 .B b004
