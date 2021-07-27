@@ -6,8 +6,6 @@ FILES=${PROG}.conf
 FILESNAME=${PROG}
 FILESDIR= /etc/system.conf.d
 
-CPPFLAGS+= -DPERFDATA
-
 DPADD+=	${LIBCHARDRIVER} ${LIBSYS}
 LDADD+=	-lchardriver -lsys
 

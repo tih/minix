@@ -84,27 +84,6 @@ static int io_timeout = 0;
 
 static int irq_hook_id;
 
-#ifdef PERFDATA
-static struct perfdata perfdata;
-static clock_t perfstart;
-static void perf_update(size_t size, int writing) {
-  clock_t now;
-  int ticks;
-  long tot;
-  getuptime(&now, NULL, NULL);
-  ticks = now - perfstart;
-  if (writing) {
-    perfdata.w[size-1].count++;
-    tot = perfdata.w[size-1].ticks * perfdata.w[size-1].count + ticks;
-    perfdata.w[size-1].ticks = tot / perfdata.w[size-1].count;
-  } else {
-    perfdata.r[size-1].count++;
-    tot = perfdata.r[size-1].ticks * perfdata.r[size-1].count + ticks;
-    perfdata.r[size-1].ticks = tot / perfdata.r[size-1].count;
-  }
-}
-#endif
-
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 		     endpoint_t UNUSED(user_endpt)) {
 
@@ -149,12 +128,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
     dma.size = size;
     dma.done = 0;
     dma.chunk = 0;
-#ifdef PERFDATA
-    if (size <= PERFMAXLEN) {
-      getuptime(&now, NULL, NULL);
-      perfstart = now;
-    }
-#endif
     sys_setalarm(io_timeout, 0);
     dma_read();
     return EDONTREPLY;
@@ -164,10 +137,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
-
-#ifdef PERFDATA
-  perfstart = now;
-#endif
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -208,11 +177,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (ret != OK)
     return ret;
 
-#ifdef PERFDATA
-  if (size <= PERFMAXLEN)
-    perf_update(size, 0);
-#endif
-
   return copied;
 }
 
@@ -237,12 +201,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     dma.size = size;
     dma.done = 0;
     dma.chunk = 0;
-#ifdef PERFDATA
-    if (size <= PERFMAXLEN) {
-      getuptime(&now, NULL, NULL);
-      perfstart = now;
-    }
-#endif
     sys_setalarm(io_timeout, 0);
     dma_write();
     return EDONTREPLY;
@@ -252,10 +210,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
-
-#ifdef PERFDATA
-  perfstart = now;
-#endif
 
   copied = 0;
   for (i = 0, j = 0; i < size; i++) {
@@ -290,11 +244,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (ret != OK)
     return ret;
 
-#ifdef PERFDATA
-  if (size <= PERFMAXLEN)
-    perf_update(size, 1);
-#endif
-
   return i;
 }
 
@@ -313,10 +262,6 @@ static void dma_read(void) {
   if (dma.done == dma.size) {
     chardriver_reply_task(dma.endpt, dma.id, dma.size);
     dma.endpt = 0;
-#ifdef PERFDATA
-    if (dma.size <= PERFMAXLEN)
-      perf_update(dma.size, 0);
-#endif
     return;
   }
 
@@ -342,10 +287,6 @@ static void dma_write(void) {
   if (dma.done == dma.size) {
     chardriver_reply_task(dma.endpt, dma.id, dma.size);
     dma.endpt = 0;
-#ifdef PERFDATA
-    if (dma.size <= PERFMAXLEN)
-      perf_update(dma.size, 1);
-#endif
     return;
   }
 
@@ -454,12 +395,6 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     dma_available = 0;
     ret = OK;
     break;
-#ifdef PERFDATA
-  case B004GETPERF:
-    ret = sys_safecopyto(endpt, grant,
-			 0, (vir_bytes)&perfdata, sizeof perfdata);
-    break;
-#endif
   default:
     ret = EINVAL;
   }
@@ -561,7 +496,7 @@ static void sef_local_startup() {
 }
 
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
-  int off, i, k;
+  int off, k;
 
   if (type == SEF_INIT_LU)
     lu_state_restore();
@@ -598,16 +533,6 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   printf("b004: allocated a %d byte DMA buffer\n", dmabuf_len);
 
   dma.endpt = 0;
-
-#ifdef PERFDATA
-  perfdata.threshold = DMA_THRESHOLD;
-  for (i = 0; i < PERFMAXLEN; i++) {
-    perfdata.r[i].count = 0;
-    perfdata.r[i].ticks = 0;
-    perfdata.w[i].count = 0;
-    perfdata.w[i].ticks = 0;
-  }
-#endif
 
   if (board_type == 0)
     b004_probe();
