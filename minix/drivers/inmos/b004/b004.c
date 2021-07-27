@@ -315,7 +315,7 @@ static void dma_read(void) {
     dma.endpt = 0;
 #ifdef PERFDATA
     if (dma.size <= PERFMAXLEN)
-      perf_update(size, 0);
+      perf_update(dma.size, 0);
 #endif
     return;
   }
@@ -344,7 +344,7 @@ static void dma_write(void) {
     dma.endpt = 0;
 #ifdef PERFDATA
     if (dma.size <= PERFMAXLEN)
-      perf_update(size, 1);
+      perf_update(dma.size, 1);
 #endif
     return;
   }
