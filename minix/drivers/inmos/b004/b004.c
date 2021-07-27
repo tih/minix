@@ -602,10 +602,10 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
 #ifdef PERFDATA
   perfdata.threshold = DMA_THRESHOLD;
   for (i = 0; i < PERFMAXLEN; i++) {
-    perfdata.r.count[i] = 0;
-    perfdata.r.ticks[i] = 0;
-    perfdata.w.count[i] = 0;
-    perfdata.w.ticks[i] = 0;
+    perfdata.r[i].count = 0;
+    perfdata.r[i].ticks = 0;
+    perfdata.w[i].count = 0;
+    perfdata.w[i].ticks = 0;
   }
 #endif
 
