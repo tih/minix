@@ -26,4 +26,24 @@ struct b004_flags {
 #define B004TIMEOUT	_IO  ('T',  9)
 #define B004NODMA	_IO  ('T', 10)
 
+#ifdef PERFDATA
+
+#define PERFMAXLEN 64
+
+struct perfdata {
+  int threshold;
+  struct {
+    int count;
+    int ticks;
+  } r[PERFMAXLEN];
+  struct {
+    int count;
+    int ticks;
+  } w[PERFMAXLEN];
+};
+
+#define B004GETPERF	_IOR ('T',  11, struct perfdata)
+
+#endif /* PERFDATA */
+
 #endif /* _S_I_B004_H */
