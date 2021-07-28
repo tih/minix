@@ -1,4 +1,6 @@
-/*	sys/ioc_b004.h - Inmos B004 ioctls */
+/*
+ *	INMOS B004/B008 Transputer TRAM Motherboard character device
+ */
 
 #ifndef _S_I_B004_H
 #define _S_I_B004_H

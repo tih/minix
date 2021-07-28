@@ -1,3 +1,7 @@
+/*
+ *	INMOS B004/B008 Transputer TRAM Motherboard character device
+ */
+
 #ifndef __B004_H
 #define __B004_H
 

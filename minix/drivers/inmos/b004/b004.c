@@ -1,3 +1,15 @@
+/*
+ *	INMOS B004/B008 Transputer TRAM Motherboard character device
+ *
+ *	This driver implements the B004 interface, using the I/O port
+ *	block starting at 0x150, for polled communication with the
+ *	Transputer network.  It will also detect the presence of the
+ *	B008 extensions, and use those to use DMA for transfers over
+ *	a minimum size, worth the DMA setup overhead.
+ *
+ *	Only one device is supported, and half duplex communication.
+ */
+
 #include <minix/drivers.h>
 #include <minix/chardriver.h>
 #include <sys/ioc_b004.h>
@@ -84,6 +96,10 @@ static int io_timeout = 0;
 
 static int irq_hook_id;
 
+/*
+ *	OPEN: permits only one client at a time.
+ */
+
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 		     endpoint_t UNUSED(user_endpt)) {
 
@@ -94,6 +110,10 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 
   return OK;
 }
+
+/*
+ *	CLOSE: resets timeout to default; re-enables DMA if disabled.
+ */
 
 static int b004_close(devminor_t UNUSED(minor)) {
 
@@ -106,6 +126,11 @@ static int b004_close(devminor_t UNUSED(minor)) {
 
   return OK;
 }
+
+/*
+ *	READ: if DMA available, sets up and initiates a DMA transfer,
+ *	      and suspends the caller.  Otherwise, does a polled read.
+ */
 
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
@@ -180,6 +205,11 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   return copied;
 }
 
+/*
+ *	WRITE: if DMA available, sets up and initiates a DMA transfer,
+ *	       and suspends the caller.  Otherwise, does a polled write.
+ */
+
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			  int UNUSED(flags), cdev_id_t id) {
@@ -247,6 +277,11 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   return i;
 }
 
+/*
+ *	DMA_READ: simple state machine for doing DMA read.  Called once
+ *	          from READ, above, then one or more times from INTR.
+ */
+
 static void dma_read(void) {
   int ret = OK;
 
@@ -276,6 +311,11 @@ static void dma_read(void) {
   }
 }
 
+/*
+ *	DMA_WRITE: simple state machine for doing DMA write.  Called once
+ *	           from WRITE, above, then one or more times from INTR.
+ */
+
 static void dma_write(void) {
   int ret = OK;
 
@@ -303,6 +343,11 @@ static void dma_write(void) {
     dma.endpt = 0;
   }
 }
+
+/*
+ *	DMA_TRANSFER: program the DMA controller for a transfer, then
+ *		      enable interrupts and tell the B008 to start it.
+ */
 
 static int dma_transfer(phys_bytes dmabuf_phys, size_t count, int do_write) {
   pvb_pair_t byte_out[9];
@@ -334,6 +379,10 @@ static int dma_transfer(phys_bytes dmabuf_phys, size_t count, int do_write) {
 
   return OK;
 }
+
+/*
+ *	IOCTL: handle the various ioctl() calls the driver supports.
+ */
 
 static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
 		      endpoint_t endpt, cp_grant_id_t grant, int UNUSED(flags),
@@ -402,6 +451,12 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   return ret;
 }
 
+/*
+ *	CANCEL: if the indicated operation is still in progress, cancel
+ *		it, log this, and return EINTR to the client.  If not,
+ *		just ignore the CANCEL message; a response has been sent.
+ */
+
 static int b004_cancel(devminor_t UNUSED(minor),
 			endpoint_t endpt, cdev_id_t id) {
 
@@ -416,6 +471,12 @@ static int b004_cancel(devminor_t UNUSED(minor),
   return EDONTREPLY;
 }
 
+/*
+ *	ALARM: if the indicated operation is still in progress, time it
+ *	       out, log this, and return the count of bytes that have 
+ *	       already been transfered.  Otherwise, ignore the alarm.
+ */
+
 static void b004_alarm(clock_t UNUSED(stamp)) {
 
   if (dma.endpt != 0) {
@@ -426,6 +487,14 @@ static void b004_alarm(clock_t UNUSED(stamp)) {
   }
 }
 
+/*
+ *	INTR: acknowledge each possible interrupt source, then run the
+ *	      next step in the relevant state machine.  Note that this
+ *	      is where DMA operation timeout alarms are canceled, and
+ *	      that we also detect the interrupt from the experimental
+ *	      DMA attempt during the initial probe, switching DMA on.
+ */
+
 static void b004_intr(unsigned int UNUSED(mask)) {
   pvb_pair_t byte_out[3];
 
@@ -434,7 +503,7 @@ static void b004_intr(unsigned int UNUSED(mask)) {
   pv_set(byte_out[2], B008_INT, B008_INT_DIS);
 
   if (sys_voutb(byte_out, 3) != OK)
-    panic("b004: failed to reset interrupts");
+    panic("b004: failed to acknowledge interrupt");
 
   if (probe_active) {
     printf("b004: DMA verified; switching to B008 mode\n");
@@ -460,6 +529,10 @@ static void b004_intr(unsigned int UNUSED(mask)) {
   return;
 }
 
+/*
+ *	Live update: save state.  Not tested; not production ready.
+ */
+
 static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 
   ds_publish_u32("board_type", board_type, DSF_OVERWRITE);
@@ -467,6 +540,10 @@ static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 
   return OK;
 }
+
+/*
+ *	Live update: restore state.  Not tested; not production ready.
+ */
 
 static int lu_state_restore() {
   u32_t value;
@@ -484,6 +561,10 @@ static int lu_state_restore() {
   return OK;
 }
 
+/*
+ *	SEF startup routine; establish callbacks, and fire startup.
+ */
+
 static void sef_local_startup() {
 
   sef_setcb_init_fresh(sef_cb_init);
@@ -494,6 +575,15 @@ static void sef_local_startup() {
 
   sef_startup();
 }
+
+/*
+ *	SEF initialization: set up default timeout value, allocate
+ *	buffers for communication (polled and DMA), and probe for the
+ *	physical device.  Note the strategy for getting a sizeable
+ *	low memory DMA buffer: prefer a properly aligned allocation,
+ *	but accept a double size non-aligned one, and use an aligned
+ *	part of it.  The latter is wasteful, but we want the space.
+ */
 
 static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   int off, k;
@@ -546,6 +636,15 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   return OK;
 }
 
+/*
+ *	PROBE: reset the expected B004 compatible hardware, then check
+ *	       that the Output Status Register indicates being ready to
+ *	       transmit.  Once this is established, verify that we can
+ *	       enable interrupts properly, then disable them, and fire
+ *	       off a blind DMA write of one byte.  If this works, the
+ *	       interrupt handler will detect it, and enable DMA use.
+ */
+
 void b004_probe(void) {
   unsigned int b;
 
@@ -576,6 +675,10 @@ void b004_probe(void) {
   }
 }
 
+/*
+ *	RESET: the I/O operations to reset a B004 compatible device.
+ */
+
 void b004_reset(void) {
 
   sys_outb(B004_ANALYSE, 0);
@@ -587,6 +690,12 @@ void b004_reset(void) {
   sys_outb(B004_RESET, 0);
   usleep(B004_RST_DELAY);
 }
+
+/*
+ *	ANALYSE: the I/O operations to switch a B004 compatible device
+ *		 into analyse mode; used by debuggers to talk directly
+ *		 to the first Transputer on the physical device.
+ */
 
 void b004_analyse(void) {
 
@@ -603,6 +712,12 @@ void b004_analyse(void) {
   sys_outb(B004_ANALYSE, 0);
   usleep(B004_RST_DELAY);
 }
+
+/*
+ *	MAIN: run the startup routine, then pass control to the library
+ *	      routine that handles character driver messages, and calls
+ *	      our various message handler functions, above.
+ */
 
 int main(void) {
 

@@ -1,14 +1,23 @@
 .TH B004 4
 .SH NAME
-b004 \- Inmos B004 compatible Transputer interface boards
+b004 \- INMOS B004/B008 Transputer TRAM Motherboard
 .SH DESCRIPTION
 The
 .B b004
-driver interfaces to standard Transputer hardware.
+character device driver interfaces to standard Transputer hardware
+compatible with the
+.B INMOS
+motherboards that plugged into the
+.B ISA
+bus on the
+.B IBM PC
+and
+.B IBM PC AT
+computers.
 .SH DESCRIPTION
 Hardware that interfaces a Transputer, or a network of Transputers, to
 a PC, normally implements the interface standard that
-.B Inmos
+.B INMOS
 established with their
 .B B004
 evaluation board, and which they kept using with the later boards,
@@ -55,7 +64,8 @@ or
 compatible board, discovers which of the two it's dealing with, and
 handles the I/O operations transparently to the client.  It only
 allows one client at a time to open the link, and insists on only one
-operation at at time being active on the link.
+operation at at time being active on the link.  This was normal for
+drivers for these devices, and is expected by software using them.
 .PP
 Additionally, the driver supports a number of \fIioctl\fR calls, to
 handle various parameter settings, particularly I/O timeout, and
