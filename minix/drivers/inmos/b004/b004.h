@@ -39,7 +39,7 @@
 
 #define DMA_ALIGN	(64*1024)	/* DMA must stay within a click */
 
-#define DMA_THRESHOLD	15		/* Polled I/O for smaller xfers */
+#define DMA_THRESHOLD	8		/* Polled I/O for smaller xfers */
 
 #define DMA_ADDR	0x002		/* DMA chan 1 port; low 16 addr bits */
 #define DMA_TOP		0x083		/* DMA chan 1 port; high 8 addr bits */

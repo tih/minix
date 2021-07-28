@@ -145,7 +145,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (linkbuf_busy || (dma.endpt != 0))
     return EIO;
 
-  if ((dma_available) && (size > DMA_THRESHOLD)) {
+  if ((dma_available) && (size >= DMA_THRESHOLD)) {
     dma.endpt = endpt;
     dma.id = id;
     dma.grant = grant;
@@ -223,7 +223,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (linkbuf_busy || (dma.endpt != 0))
     return EIO;
 
-  if ((dma_available) && (size > DMA_THRESHOLD)) {
+  if ((dma_available) && (size >= DMA_THRESHOLD)) {
     dma.endpt = endpt;
     dma.id = id;
     dma.grant = grant;
