@@ -135,7 +135,7 @@ static int b004_close(devminor_t UNUSED(minor)) {
 static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			 endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			 int UNUSED(flags), cdev_id_t id) {
-  int ret, b;
+  int ret = OK, b;
   size_t i, j, copied;
   clock_t now, deadline;
 
@@ -213,7 +213,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
 static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
 			  endpoint_t endpt, cp_grant_id_t grant, size_t size,
 			  int UNUSED(flags), cdev_id_t id) {
-  int ret, b;
+  int ret = OK, b;
   size_t i, j, copied, chunk;
   clock_t now, deadline;
 
