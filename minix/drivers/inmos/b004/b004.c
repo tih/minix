@@ -525,7 +525,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = b & B004_HAS_ERROR;
     break;
   case B004READABLE:
-    if (dma_endpt == 0) {
+    if (dma.endpt == 0) {
       sys_inb(B004_ISR, &b);
       ret = b & B004_READY;
     } else {
@@ -533,7 +533,7 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     }
     break;
   case B004WRITEABLE:
-    if (dma_endpt == 0) {
+    if (dma.endpt == 0) {
       sys_inb(B004_OSR, &b);
       ret = b & B004_READY;
     } else {
