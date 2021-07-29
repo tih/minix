@@ -174,8 +174,10 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       } else {
 	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
-	  if (now > deadline)
+	  if (now > deadline) {
+	    printf("b004: timing out %d byte read at %d\n", size, j);
 	    goto out;
+	  }
 	}
       }
     }
@@ -259,8 +261,10 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
       } else {
 	if (io_timeout > 0) {
 	  getuptime(&now, NULL, NULL);
-	  if (now > deadline)
+	  if (now > deadline) {
+	    printf("b004: timing out %d byte write at %d\n", size, j);
 	    goto out;
+	  }
 	}
       }
     }
@@ -406,7 +410,7 @@ static void b004_alarm(clock_t UNUSED(stamp)) {
 
   if (dma.endpt != 0) {
     dma_abort();
-    printf("b004: timing out %d byte %s operation\n",
+    printf("b004: timing out %d byte DMA %s\n",
            dma.size, dma.writing ? "write" : "read");
     chardriver_reply_task(dma.endpt, dma.id, dma.done);
     dma.endpt = 0;
@@ -425,7 +429,7 @@ static int b004_cancel(devminor_t UNUSED(minor),
   if (dma.endpt == endpt && dma.id == id) {
     sys_setalarm(0, 0);
     dma_abort();
-    printf("b004: cancelling %d byte %s operation\n",
+    printf("b004: cancelling %d byte DMA %s\n",
            dma.size, dma.writing ? "write" : "read");
     dma.endpt = 0;
     return EINTR;
