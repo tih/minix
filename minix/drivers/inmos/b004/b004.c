@@ -366,8 +366,8 @@ static int dma_transfer(phys_bytes dmabuf_phys, size_t count, int do_write) {
   if ((ret = sys_voutb(byte_out, 9)) != OK)
     panic("dma_setup: failed to program DMA chip (%d)", ret);
 
-  pv_set(byte_out[0], B004_ISR, B004_INT_ENA);
-  pv_set(byte_out[1], B004_OSR, B004_INT_ENA);
+  pv_set(byte_out[0], B004_ISR, do_write ? B004_INT_DIS : B004_INT_ENA);
+  pv_set(byte_out[1], B004_OSR, do_write ? B004_INT_ENA : B004_INT_DIS);
   pv_set(byte_out[2], B008_INT, B008_DMAINT_ENA);
 
   if ((ret = sys_voutb(byte_out, 3)) != OK)
@@ -378,6 +378,102 @@ static int dma_transfer(phys_bytes dmabuf_phys, size_t count, int do_write) {
   sys_outb(B008_DMA, do_write ? B008_DMAWRITE : B008_DMAREAD);
 
   return OK;
+}
+
+/*
+ *	DMA_ABORT: abort an ongoing DMA operation, resetting controller.
+ */
+
+static void dma_abort(void) {
+  pvb_pair_t byte_out[5];
+
+  pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
+  pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
+  pv_set(byte_out[2], B008_INT, B008_INT_DIS);
+  pv_set(byte_out[3], DMA_INIT, DMA_MASK);
+  pv_set(byte_out[4], DMA_FLIPFLOP, 0);
+
+  sys_voutb(byte_out, 5);
+}
+
+/*
+ *	ALARM: if the indicated operation is still in progress, time it
+ *	       out, log this, and return the count of bytes that have 
+ *	       already been transfered.  Otherwise, ignore the alarm.
+ */
+
+static void b004_alarm(clock_t UNUSED(stamp)) {
+
+  if (dma.endpt != 0) {
+    dma_abort();
+    printf("b004: timing out %d byte %s operation\n",
+           dma.size, dma.writing ? "write" : "read");
+    chardriver_reply_task(dma.endpt, dma.id, dma.done);
+    dma.endpt = 0;
+  }
+}
+
+/*
+ *	CANCEL: if the indicated operation is still in progress, cancel
+ *		it, log this, and return EINTR to the client.  If not,
+ *		just ignore the CANCEL message; a response has been sent.
+ */
+
+static int b004_cancel(devminor_t UNUSED(minor),
+			endpoint_t endpt, cdev_id_t id) {
+
+  if (dma.endpt == endpt && dma.id == id) {
+    sys_setalarm(0, 0);
+    dma_abort();
+    printf("b004: cancelling %d byte %s operation\n",
+           dma.size, dma.writing ? "write" : "read");
+    dma.endpt = 0;
+    return EINTR;
+  }
+
+  return EDONTREPLY;
+}
+
+/*
+ *	INTR: acknowledge each possible interrupt source, then run the
+ *	      next step in the relevant state machine.  Note that this
+ *	      is where DMA operation timeout alarms are canceled, and
+ *	      that we also detect the interrupt from the experimental
+ *	      DMA attempt during the initial probe, switching DMA on.
+ */
+
+static void b004_intr(unsigned int UNUSED(mask)) {
+  pvb_pair_t byte_out[3];
+
+  pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
+  pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
+  pv_set(byte_out[2], B008_INT, B008_INT_DIS);
+
+  if (sys_voutb(byte_out, 3) != OK)
+    panic("b004: failed to acknowledge interrupt");
+
+  if (probe_active) {
+    printf("b004: DMA verified; switching to B008 mode\n");
+    board_type = B008;
+    dma_available = 1;
+    probe_active = 0;
+    return;
+  }
+
+  if (dma.endpt == 0) {
+    printf("b004: unexpected hardware interrupt\n");
+    return;
+  }
+
+  if (dma.writing)
+    dma_write();
+  else
+    dma_read();
+
+  if (dma.endpt == 0)
+    sys_setalarm(0, 0);
+
+  return;
 }
 
 /*
@@ -429,12 +525,20 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = b & B004_HAS_ERROR;
     break;
   case B004READABLE:
-    sys_inb(B004_ISR, &b);
-    ret = b & B004_READY;
+    if (dma_endpt == 0) {
+      sys_inb(B004_ISR, &b);
+      ret = b & B004_READY;
+    } else {
+      ret = 0;
+    }
     break;
   case B004WRITEABLE:
-    sys_inb(B004_OSR, &b);
-    ret = b & B004_READY;
+    if (dma_endpt == 0) {
+      sys_inb(B004_OSR, &b);
+      ret = b & B004_READY;
+    } else {
+      ret = 0;
+    }
     break;
   case B004TIMEOUT:
     ret = (io_timeout * 10) / system_hz;
@@ -449,84 +553,6 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   }
 
   return ret;
-}
-
-/*
- *	CANCEL: if the indicated operation is still in progress, cancel
- *		it, log this, and return EINTR to the client.  If not,
- *		just ignore the CANCEL message; a response has been sent.
- */
-
-static int b004_cancel(devminor_t UNUSED(minor),
-			endpoint_t endpt, cdev_id_t id) {
-
-  if (dma.endpt == endpt && dma.id == id) {
-    sys_setalarm(0, 0);
-    printf("b004: cancelling %d byte %s operation\n",
-           dma.size, dma.writing ? "write" : "read");
-    dma.endpt = 0;
-    return EINTR;
-  }
-
-  return EDONTREPLY;
-}
-
-/*
- *	ALARM: if the indicated operation is still in progress, time it
- *	       out, log this, and return the count of bytes that have 
- *	       already been transfered.  Otherwise, ignore the alarm.
- */
-
-static void b004_alarm(clock_t UNUSED(stamp)) {
-
-  if (dma.endpt != 0) {
-    printf("b004: timing out a %d byte %s operation\n",
-           dma.size, dma.writing ? "write" : "read");
-    chardriver_reply_task(dma.endpt, dma.id, dma.done);
-    dma.endpt = 0;
-  }
-}
-
-/*
- *	INTR: acknowledge each possible interrupt source, then run the
- *	      next step in the relevant state machine.  Note that this
- *	      is where DMA operation timeout alarms are canceled, and
- *	      that we also detect the interrupt from the experimental
- *	      DMA attempt during the initial probe, switching DMA on.
- */
-
-static void b004_intr(unsigned int UNUSED(mask)) {
-  pvb_pair_t byte_out[3];
-
-  pv_set(byte_out[0], B004_ISR, B004_INT_DIS);
-  pv_set(byte_out[1], B004_OSR, B004_INT_DIS);
-  pv_set(byte_out[2], B008_INT, B008_INT_DIS);
-
-  if (sys_voutb(byte_out, 3) != OK)
-    panic("b004: failed to acknowledge interrupt");
-
-  if (probe_active) {
-    printf("b004: DMA verified; switching to B008 mode\n");
-    board_type = B008;
-    dma_available = 1;
-    probe_active = 0;
-    return;
-  }
-
-  if (dma.endpt == 0) {
-    printf("b004: unexpected hardware interrupt\n");
-    return;
-  }
-
-  if (dma.writing)
-    dma_write();
-  else
-    dma_read();
-
-  if (dma.endpt == 0)
-    sys_setalarm(0, 0);
-
-  return;
 }
 
 /*
