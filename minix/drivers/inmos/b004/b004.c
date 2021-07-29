@@ -50,6 +50,7 @@ static void b004_analyse(void);
 static void dma_read(void);
 static void dma_write(void);
 static int dma_transfer(phys_bytes dmabuf_phys, size_t count, int do_write);
+static void dma_abort(void);
 
 static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
@@ -117,10 +118,16 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 
 static int b004_close(devminor_t UNUSED(minor)) {
 
+  if (dma.endpt != 0) {
+    sys_setalarm(0, 0);
+    dma_abort();
+    dma.endpt = 0;
+  }
+
   io_timeout = system_hz;
+
   if (dma_disabled)
     dma_available = 1;
-  dma.endpt = 0;
 
   board_busy = 0;
 
@@ -492,6 +499,9 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   struct b004_flags flag;
   int timeout;
 
+  if (linkbuf_busy || (dma.endpt != 0))
+    return EINVAL;
+
   switch (request) {
   case B004RESET:
     b004_reset();
@@ -529,20 +539,12 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     ret = b & B004_HAS_ERROR;
     break;
   case B004READABLE:
-    if (dma.endpt == 0) {
-      sys_inb(B004_ISR, &b);
-      ret = b & B004_READY;
-    } else {
-      ret = 0;
-    }
+    sys_inb(B004_ISR, &b);
+    ret = b & B004_READY;
     break;
   case B004WRITEABLE:
-    if (dma.endpt == 0) {
-      sys_inb(B004_OSR, &b);
-      ret = b & B004_READY;
-    } else {
-      ret = 0;
-    }
+    sys_inb(B004_OSR, &b);
+    ret = b & B004_READY;
     break;
   case B004TIMEOUT:
     ret = (io_timeout * 10) / system_hz;
