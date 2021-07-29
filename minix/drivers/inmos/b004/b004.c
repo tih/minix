@@ -642,13 +642,13 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
   if (k == 0)
     panic("sef_cb_init: couldn't allocate DMA buffer");
 
+  dmabuf_len = k * 1024;
+
   if (dmabuf_phys/DMA_ALIGN != (dmabuf_phys+dmabuf_len-1)/DMA_ALIGN) {
     off = dmabuf_phys % DMA_ALIGN;
     dmabuf += (DMA_ALIGN - off);
     dmabuf_phys += (DMA_ALIGN - off);
   }
-
-  dmabuf_len = k * 1024;
 
   printf("b004: allocated a %d byte DMA buffer\n", dmabuf_len);
 
