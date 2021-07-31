@@ -72,7 +72,6 @@ static int board_type = 0;
 static int board_busy = 1;
 
 static unsigned char *linkbuf;
-static int linkbuf_busy = 0;
 
 static unsigned char *dmabuf;
 static phys_bytes dmabuf_phys;
@@ -98,7 +97,7 @@ static int io_timeout = 0;
 static int irq_hook_id;
 
 /*
- *	OPEN: permits only one client at a time.
+ *	OPEN: permits only one client to have the device open.
  */
 
 static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
@@ -113,18 +112,19 @@ static int b004_open(devminor_t UNUSED(minor), int UNUSED(access),
 }
 
 /*
- *	CLOSE: resets timeout to default; re-enables DMA if disabled.
+ *	CLOSE: resets timeout to default; re-enables DMA if the
+ *	       client disabled it using ioctl(fd, B004NODMA).
  */
 
 static int b004_close(devminor_t UNUSED(minor)) {
+
+  io_timeout = system_hz;
 
   if (dma.endpt != 0) {
     sys_setalarm(0, 0);
     dma_abort();
     dma.endpt = 0;
   }
-
-  io_timeout = system_hz;
 
   if (dma_disabled)
     dma_available = 1;
@@ -149,7 +149,7 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)
     return EINVAL;
 
-  if (linkbuf_busy || (dma.endpt != 0))
+  if (dma.endpt != 0)
     return EIO;
 
   if ((dma_available) && (size >= DMA_THRESHOLD)) {
@@ -164,8 +164,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
     dma_read();
     return EDONTREPLY;
   }
-
-  linkbuf_busy = 1;
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -206,8 +204,6 @@ static ssize_t b004_read(devminor_t UNUSED(minor), u64_t UNUSED(position),
       copied += j;
   }
 
-  linkbuf_busy = 0;
-
   if (ret != OK)
     return ret;
 
@@ -229,7 +225,7 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   if (size <= 0)
     return EINVAL;
 
-  if (linkbuf_busy || (dma.endpt != 0))
+  if (dma.endpt != 0)
     return EIO;
 
   if ((dma_available) && (size >= DMA_THRESHOLD)) {
@@ -244,8 +240,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
     dma_write();
     return EDONTREPLY;
   }
-
-  linkbuf_busy = 1;
 
   getuptime(&now, NULL, NULL);
   deadline = now + io_timeout;
@@ -280,8 +274,6 @@ static ssize_t b004_write(devminor_t UNUSED(minor), u64_t UNUSED(position),
   }
 
  out:
-  linkbuf_busy = 0;
-
   if (ret != OK)
     return ret;
 
@@ -408,9 +400,9 @@ static void dma_abort(void) {
 }
 
 /*
- *	ALARM: if the indicated operation is still in progress, time it
- *	       out, log this, and return the count of bytes that have 
- *	       already been transfered.  Otherwise, ignore the alarm.
+ *	ALARM: if a DMA operation is in progress, time it out, log
+ *	       this, and return the count of bytes that have already
+ *	       been transfered.  Otherwise, ignore the alarm.
  */
 
 static void b004_alarm(clock_t UNUSED(stamp)) {
@@ -427,7 +419,8 @@ static void b004_alarm(clock_t UNUSED(stamp)) {
 /*
  *	CANCEL: if the indicated operation is still in progress, cancel
  *		it, log this, and return EINTR to the client.  If not,
- *		just ignore the CANCEL message; a response has been sent.
+ *		just ignore the CANCEL message; the response was sent
+ *	        when the operation completed.
  */
 
 static int b004_cancel(devminor_t UNUSED(minor),
@@ -499,33 +492,17 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
   struct b004_flags flag;
   int timeout;
 
-  if (linkbuf_busy || (dma.endpt != 0))
+  if (dma.endpt != 0)
     return EINVAL;
 
   switch (request) {
-  case B004RESET:
-    b004_reset();
-    ret = OK;
-    break;
-  case B004ANALYSE:
-    b004_analyse();
-    ret = OK;
-    break;
-  case B004GETFLAGS:
-    flag.b004_board = board_type;
-    sys_inb(B004_ISR, &b);
-    flag.b004_readable = b & B004_READY;
-    sys_inb(B004_OSR, &b);
-    flag.b004_writeable = b & B004_READY;
-    sys_inb(B004_ERROR, &b);
-    flag.b004_error = b & B004_HAS_ERROR;
-    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag, sizeof flag);
-    break;
+
   case B004GETTIMEOUT:
     timeout = (io_timeout * 10) / system_hz;
     ret = sys_safecopyto(endpt, grant,
 			 0, (vir_bytes)&timeout, sizeof timeout);
     break;
+
   case B004SETTIMEOUT:
     ret = sys_safecopyfrom(endpt, grant,
 			   0, (vir_bytes)&timeout, sizeof timeout);
@@ -534,26 +511,65 @@ static int b004_ioctl(devminor_t UNUSED(minor), unsigned long request,
     else
       ret = EINVAL;
     break;
-  case B004ERROR:
-    sys_inb(B004_ERROR, &b);
-    ret = b & B004_HAS_ERROR;
+
+  case B004TIMEOUT:
+    ret = (io_timeout * 10) / system_hz;
     break;
+
+  case B004BOARDTYPE:
+    ret = board_type;
+    break;
+
   case B004READABLE:
     sys_inb(B004_ISR, &b);
     ret = b & B004_READY;
     break;
+
   case B004WRITEABLE:
     sys_inb(B004_OSR, &b);
     ret = b & B004_READY;
     break;
-  case B004TIMEOUT:
-    ret = (io_timeout * 10) / system_hz;
+
+  case B004ERROR:
+    sys_inb(B004_ERROR, &b);
+    ret = b & B004_HAS_ERROR;
     break;
-  case B004NODMA:
+
+  case B004GETFLAGS:
+    flag.b004_board = board_type;
+    flag.b004_timeout = (io_timeout * 10) / system_hz;
+    sys_inb(B004_ISR, &b);
+    flag.b004_readable = b & B004_READY;
+    sys_inb(B004_OSR, &b);
+    flag.b004_writeable = b & B004_READY;
+    sys_inb(B004_ERROR, &b);
+    flag.b004_error = b & B004_HAS_ERROR;
+    flag.b004_dma_ok = dma_available | dma_disabled;
+    ret = sys_safecopyto(endpt, grant, 0, (vir_bytes) &flag, sizeof flag);
+    break;
+
+  case B004DMADISABLE:
     dma_disabled |= dma_available;
     dma_available = 0;
     ret = OK;
     break;
+
+  case B004DMAENABLE:
+    if (dma_disabled)
+      dma_available = 1;
+    ret = OK;
+    break;
+
+  case B004RESET:
+    b004_reset();
+    ret = OK;
+    break;
+
+  case B004ANALYSE:
+    b004_analyse();
+    ret = OK;
+    break;
+
   default:
     ret = EINVAL;
   }
@@ -569,6 +585,8 @@ static int sef_cb_lu_state_save(int UNUSED(state), int UNUSED(flags)) {
 
   ds_publish_u32("board_type", board_type, DSF_OVERWRITE);
   ds_publish_u32("io_timeout", io_timeout, DSF_OVERWRITE);
+  ds_publish_u32("dma_available", dma_available, DSF_OVERWRITE);
+  ds_publish_u32("dma_disabled", dma_disabled, DSF_OVERWRITE);
 
   return OK;
 }
@@ -588,6 +606,16 @@ static int lu_state_restore() {
   if (ds_retrieve_u32("io_timeout", &value) == OK) {
     io_timeout = (int) value;
     ds_delete_u32("io_timeout");
+  }
+
+  if (ds_retrieve_u32("dma_available", &value) == OK) {
+    dma_available = (int) value;
+    ds_delete_u32("dma_available");
+  }
+
+  if (ds_retrieve_u32("dma_disabled", &value) == OK) {
+    dma_disabled = (int) value;
+    ds_delete_u32("dma_disabled");
   }
 
   return OK;
@@ -672,9 +700,14 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info)) {
  *	PROBE: reset the expected B004 compatible hardware, then check
  *	       that the Output Status Register indicates being ready to
  *	       transmit.  Once this is established, verify that we can
- *	       enable interrupts properly, then disable them, and fire
- *	       off a blind DMA write of one byte.  If this works, the
- *	       interrupt handler will detect it, and enable DMA use.
+ *	       enable interrupts properly, then fire off a blind DMA
+ *	       write of one byte.  If this works, the interrupt handler
+ *	       will detect it, and enable DMA use.
+ *
+ *	       The enabling and disabling of the interrupt sources is
+ *	       done so the IRQ won't be enabled without active driving
+ *	       of the line by the board: otherwise, it'll tri-state its
+ *	       output, and this may generate spurious interrupts.
  */
 
 void b004_probe(void) {
