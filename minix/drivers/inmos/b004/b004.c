@@ -126,8 +126,10 @@ static int b004_close(devminor_t UNUSED(minor)) {
     dma.endpt = 0;
   }
 
-  if (dma_disabled)
+  if (dma_disabled) {
     dma_available = 1;
+    dma_disabled = 0;
+  }
 
   board_busy = 0;
 
